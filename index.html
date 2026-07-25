@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="スコア管理">
+<meta name="theme-color" content="#232323">
+<title>アーチェリー スコア管理</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; padding: 0; }
+  body { background:#eceae4; color:#232323; display:flex; justify-content:center;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Hiragino Sans","Noto Sans JP",sans-serif; }
+  #app { width:100%; max-width:460px; background:#f4f2ec; min-height:100vh; padding-bottom:28px; }
+  button { font-family:inherit; touch-action:manipulation; }
+  code { background:#eee; padding:1px 4px; border-radius:4px; font-size:12px; }
+
+  .top { padding:14px 16px 10px; background:#232323; color:#fff; display:flex; align-items:center; justify-content:space-between; }
+  .brand { font-weight:700; font-size:17px; } .brand .dot { color:#ffcf19; }
+  .tabs { display:flex; gap:6px; }
+  .tab { padding:6px 14px; border-radius:999px; font-size:13px; border:none; cursor:pointer; background:rgba(255,255,255,.14); color:#fff; }
+  .tab.on { background:#ffcf19; color:#3a2e00; font-weight:700; }
+
+  .flowhead { display:flex; align-items:center; justify-content:space-between; padding:12px; background:#232323; color:#fff; }
+  .flowtitle { font-weight:700; font-size:16px; }
+  .ibtn { background:transparent; border:none; color:#fff; font-size:15px; padding:6px 10px; cursor:pointer; min-width:44px; }
+  .idist { background:rgba(255,255,255,.14); border:none; color:#fff; font-weight:700; font-size:14px; padding:7px 12px; border-radius:999px; cursor:pointer; }
+
+  .add-btn { width:100%; padding:16px; border-radius:12px; border:none; cursor:pointer; background:#232323; color:#fff; font-weight:800; font-size:16px; }
+
+  .row { display:flex; align-items:center; gap:10px; }
+  .lbl { font-size:13px; color:#6b6b70; }
+  input[type=date], input[type=month], input[type=text] { padding:8px 10px; border-radius:8px; border:1px solid #d3d0c8; background:#fff; font-size:15px; color:#232323; }
+
+  .distbig { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .distbig-btn { padding:30px 0; border-radius:14px; border:1px solid #d3d0c8; background:#fff; font-size:27px; font-weight:800; color:#3a3a3f; cursor:pointer; }
+  .distbig-btn small { font-size:14px; color:#8a8a90; font-weight:600; }
+  .distbig-btn.on { border:2px solid #2f9fd8; background:#e7f4fb; color:#1c6a94; }
+
+  .card { background:#fff; border:1px solid #d3d0c8; border-radius:12px; padding:12px; }
+  .wrap { padding:12px 12px 0; }
+  .grid { display:grid; gap:4px; align-items:center; }
+  .hd { font-size:11px; color:#8a8a90; text-align:center; font-weight:600; }
+  .en { font-size:12px; color:#8a8a90; text-align:center; font-weight:600; }
+  .cell { aspect-ratio:1/1; border-radius:7px; border:1px solid #e2dfd7; background:#fff; color:#bdbab2;
+    font-size:15px; font-weight:700; cursor:pointer; padding:0; display:flex; align-items:center; justify-content:center; }
+  .cell.on { outline:3px solid #2f9fd8; outline-offset:-1px; }
+  .sum { text-align:center; font-weight:700; font-size:14px; }
+  .cum { text-align:center; font-weight:700; font-size:14px; color:#2f6f95; }
+
+  .stats { padding:10px 16px 4px; display:flex; gap:8px; }
+  .stat { flex:1; background:#fff; border:1px solid #d3d0c8; border-radius:10px; padding:8px 6px; text-align:center; }
+  .stat .k { font-size:11px; color:#8a8a90; } .stat .v { font-size:18px; font-weight:800; }
+  .stat .v small { font-size:10px; color:#8a8a90; font-weight:500; }
+
+  .hint { font-size:12px; color:#6b6b70; padding:6px 16px 0; }
+  .pad { padding:2px 12px 0; }
+  .pad-row { display:flex; gap:6px; margin-bottom:6px; }
+  .pad-btn { flex:1; padding:16px 0; border-radius:10px; cursor:pointer; font-size:20px; font-weight:800;
+    box-shadow:0 1px 0 rgba(0,0,0,.08); border-width:1px; border-style:solid; }
+  .ctrls { padding:4px 12px 0; display:flex; gap:6px; }
+  .ctrl { flex:1; padding:10px 0; border-radius:9px; font-size:13px; cursor:pointer; background:#fff; font-weight:600; border:1px solid #d3d0c8; color:#4a4a4f; }
+
+  .btn-dark { padding:12px 14px; border-radius:10px; border:none; cursor:pointer; background:#232323; color:#fff; font-weight:700; font-size:15px; }
+  .btn-ghost { padding:12px 14px; border-radius:10px; cursor:pointer; background:#fff; color:#4a4a4f; font-weight:600; font-size:15px; border:1px solid #d3d0c8; }
+
+  .hist-empty { padding:44px 24px; text-align:center; color:#8a8a90; }
+  .hist-empty .big { font-size:40px; margin-bottom:8px; }
+  .hcard { background:#fff; border:1px solid #d3d0c8; border-radius:12px; padding:12px 14px; margin-bottom:10px; }
+  .hcard .head { display:flex; justify-content:space-between; align-items:baseline; }
+  .hcard .date { font-weight:700; font-size:15px; }
+  .hcard .tot { font-size:20px; font-weight:800; } .hcard .tot small { font-size:12px; color:#8a8a90; font-weight:500; }
+  .hcard .meta { display:flex; flex-wrap:wrap; gap:14px; margin-top:6px; font-size:13px; color:#555; }
+  .hcard .meta .x { color:#a06a1a; }
+  .hcard .acts { display:flex; gap:8px; margin-top:10px; }
+
+  .chartcard { background:#fff; border:1px solid #d3d0c8; border-radius:12px; padding:12px 10px 8px; margin-bottom:12px; }
+  .chartcard .chead { display:flex; justify-content:space-between; align-items:center; padding:0 4px 8px; }
+  .chartcard .ctitle { font-weight:700; font-size:14px; }
+  .seg { display:flex; background:#e2dfd7; border-radius:8px; padding:2px; }
+  .seg button { padding:4px 10px; border-radius:6px; font-size:12px; border:none; cursor:pointer; background:transparent; color:#8a8a90; }
+  .seg button.on { background:#fff; color:#232323; font-weight:700; }
+  .legend { display:flex; flex-wrap:wrap; gap:12px; padding:6px 6px 0; font-size:12px; color:#555; }
+  .legend .lg { display:flex; align-items:center; gap:4px; } .legend .sw { width:12px; height:3px; border-radius:2px; }
+  .cnote { font-size:11px; color:#8a8a90; padding:4px 6px; line-height:1.6; }
+
+  .dists { display:flex; gap:6px; }
+  .dist { flex:1; padding:8px 0; border-radius:8px; font-size:14px; cursor:pointer; border:1px solid #d3d0c8; background:#fff; color:#6b6b70; }
+  .dist.on { border:2px solid #2f9fd8; background:#e7f4fb; color:#1c6a94; font-weight:700; }
+
+  .rrow { display:flex; align-items:center; gap:10px; padding:10px 8px; border-bottom:1px solid #f0eee8; }
+  .rrow .rk { width:30px; text-align:center; font-weight:800; color:#8a8a90; font-size:16px; }
+  .rrow .nm { flex:1; font-weight:600; }
+  .rrow .sc { font-weight:800; font-size:18px; } .rrow .sc small { font-size:11px; color:#8a8a90; font-weight:500; }
+  .rrow.me { background:#eef6fb; border-radius:8px; }
+  .youtag { font-size:11px; color:#a06a1a; -webkit-text-fill-color:#a06a1a; }
+  @keyframes shine { 0%{background-position:0% center;} 100%{background-position:200% center;} }
+  .rank1 .nm,.rank2 .nm,.rank3 .nm { font-weight:800; background-size:200% auto; -webkit-background-clip:text; background-clip:text;
+    color:transparent; -webkit-text-fill-color:transparent; animation:shine 2.4s linear infinite; }
+  .rank1 .nm { background-image:linear-gradient(90deg,#c99700,#ffe680,#fff7cc,#ffcf19,#c99700); }
+  .rank2 .nm { background-image:linear-gradient(90deg,#8f8f8f,#e6e6e6,#ffffff,#cccccc,#8f8f8f); }
+  .rank3 .nm { background-image:linear-gradient(90deg,#a0522d,#e0a072,#ffdcbf,#c47a45,#a0522d); }
+  .rank1 { background:linear-gradient(90deg,#fffdf4,#fff7dc); border-radius:8px; }
+  .rank2 { background:linear-gradient(90deg,#fbfbfb,#f0f0f0); border-radius:8px; }
+  .rank3 { background:linear-gradient(90deg,#fff8f2,#fbeee3); border-radius:8px; }
+
+  .scrim { position:fixed; inset:0; background:rgba(0,0,0,.35); z-index:20; }
+  .sheet { position:fixed; left:0; right:0; bottom:0; z-index:21; margin:0 auto; max-width:460px; background:#fff;
+    border-radius:16px 16px 0 0; padding:18px 16px calc(18px + env(safe-area-inset-bottom)); box-shadow:0 -4px 20px rgba(0,0,0,.15); }
+  .sheet-title { font-weight:800; font-size:18px; text-align:center; }
+  .sheet-sub { font-size:13px; color:#6b6b70; text-align:center; margin:6px 0 14px; }
+  .sheet-btn { display:block; width:100%; margin-top:8px; text-align:center; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+/* ===== Supabase 設定（空でも入力・記録・グラフは動く。ランキングだけ無効） ===== */
+var SUPABASE_URL = "https://okwleypjgvphvtifcweo.supabase.co";
+var SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9rd2xleXBqZ3ZwaHZ0aWZjd2VvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ5NDQ2OTYsImV4cCI6MjEwMDUyMDY5Nn0.dzJ98U9HE-NMlAb7WH30C8CJOuXo2Q47CmPfnDfnSPE";
+
+/* ---------- 的の色 ---------- */
+var COLORS = {
+  gold:{bg:"#ffcf19",fg:"#3a2e00",line:"#e6b800"}, red:{bg:"#e5362d",fg:"#fff",line:"#c22a22"},
+  blue:{bg:"#2f9fd8",fg:"#fff",line:"#2586b9"}, black:{bg:"#232323",fg:"#fff",line:"#000"},
+  white:{bg:"#f6f5f1",fg:"#232323",line:"#cfccc4"}, miss:{bg:"#8a8a90",fg:"#fff",line:"#74747a"}
+};
+function colorOf(s){
+  if(s==="M")return COLORS.miss;
+  if(s==="X"||s==="10"||s==="9")return COLORS.gold;
+  if(s==="8"||s==="7")return COLORS.red;
+  if(s==="6"||s==="5")return COLORS.blue;
+  if(s==="4"||s==="3")return COLORS.black;
+  if(s==="2"||s==="1")return COLORS.white;
+  return null;
+}
+var PAD_ROWS=[["X","10","9"],["8","7"],["6","5"],["4","3"],["2","1"],["M"]];
+var DISTANCES=[18,30,50,70];
+var DIST_COLOR={18:"#2f9fd8",30:"#2fa84f",50:"#e5852d",70:"#c22a22"};
+function val(s){ return s==null?null:s==="M"?0:s==="X"?10:Number(s); }
+function todayStr(){ var d=new Date(),p=function(n){return String(n).padStart(2,"0");}; return d.getFullYear()+"-"+p(d.getMonth()+1)+"-"+p(d.getDate()); }
+function emptyRound(dist){ var e=function(){return [null,null,null,null,null,null];}; return {distance:dist,ends:[e(),e(),e(),e(),e(),e()]}; }
+function clone(o){ return JSON.parse(JSON.stringify(o)); }
+function roundStats(round){
+  var total=0,shot=0,x=0,tens=0,endTotals=[],cumulative=[];
+  round.ends.forEach(function(end){ var et=0;
+    end.forEach(function(a){ if(a!=null){ shot++; et+=val(a); if(a==="X")x++; if(a==="X"||a==="10")tens++; } });
+    total+=et; endTotals.push(et); cumulative.push(total); });
+  return {total:total,shot:shot,x:x,tens:tens,endTotals:endTotals,cumulative:cumulative};
+}
+function firstEmpty(round){ for(var e=0;e<6;e++)for(var a=0;a<6;a++){ if(round.ends[e][a]==null)return {end:e,arrow:a}; } return {end:5,arrow:5}; }
+function jpDate(s){ var a=s.split("-"); return a[0]+"年"+Number(a[1])+"月"+Number(a[2])+"日"; }
+function shortDate(s){ var a=s.split("-"); return Number(a[1])+"/"+Number(a[2]); }
+function monthLabel(m){ var a=m.split("-"); return a[0]+"年"+Number(a[1])+"月"; }
+function escapeHtml(s){ return String(s==null?"":s).replace(/[&<>"']/g,function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); }
+
+/* ---------- 保存 ---------- */
+function load(k){ try{ var v=localStorage.getItem(k); return v?JSON.parse(v):null; }catch(e){ return null; } }
+function saveHistory(){ try{ localStorage.setItem("archery_history_v1",JSON.stringify(state.history)); }catch(e){} }
+function persistFlow(){ try{ localStorage.setItem("archery_flow_v2",JSON.stringify({
+  screen:state.screen,session:state.session,activeRound:state.activeRound,active:state.active,pickForRound:state.pickForRound,creating:state.creating })); }catch(e){} }
+function getPid(){ var p=localStorage.getItem("archery_pid"); if(!p){ p="p"+Date.now()+Math.random().toString(36).slice(2,7); localStorage.setItem("archery_pid",p);} return p; }
+
+/* ---------- 共有DB：SDKを使わず直接通信（DataCloneError回避） ---------- */
+var DB = {
+  configured:function(){ return !!(SUPABASE_URL && SUPABASE_ANON_KEY); },
+  ready:function(){ return this.configured(); },
+  _h:function(extra){ var h={apikey:SUPABASE_ANON_KEY,Authorization:"Bearer "+SUPABASE_ANON_KEY};
+    if(extra)for(var k in extra)h[k]=extra[k]; return h; },
+  select:function(month,distance){
+    var url=SUPABASE_URL+"/rest/v1/highscores?select=name,score,player_id&month=eq."+encodeURIComponent(month)+"&distance=eq."+distance+"&order=score.desc&limit=200";
+    return fetch(url,{headers:this._h(),cache:"no-store"}).then(function(r){ if(!r.ok)return r.text().then(function(t){ throw new Error(t||("HTTP "+r.status)); }); return r.json(); });
+  },
+  upsert:function(rows){
+    var url=SUPABASE_URL+"/rest/v1/highscores?on_conflict=player_id,distance,month";
+    return fetch(url,{method:"POST",headers:this._h({"Content-Type":"application/json",Prefer:"resolution=merge-duplicates,return=minimal"}),body:JSON.stringify(rows)})
+      .then(function(r){ if(!r.ok)return r.text().then(function(t){ throw new Error(t||("HTTP "+r.status)); }); return true; });
+  }
+};
+
+/* ---------- 状態 ---------- */
+var state = {
+  history: load("archery_history_v1") || [],
+  playerId: getPid(),
+  playerName: localStorage.getItem("archery_pname") || "",
+  screen: "home", creating:false, session:null, activeRound:0, active:{end:0,arrow:0}, pickForRound:0, sheet:null,
+  metric:"total", rankMonth: todayStr().slice(0,7), rankDistance:18, rankRows:null, rankLoading:false, rankErr:""
+};
+(function(){ var f=load("archery_flow_v2");
+  if(f && f.session && (f.screen==="input"||f.screen==="pickdist")){
+    state.screen=f.screen; state.session=f.session; state.activeRound=f.activeRound||0;
+    state.active=f.active||{end:0,arrow:0}; state.pickForRound=f.pickForRound||0; state.creating=!!f.creating; state.sheet=null; }
+})();
+
+/* ---------- ランキング ---------- */
+function usedRounds(s){ var rc=s.roundCount||s.rounds.length; return s.rounds.slice(0,rc).filter(function(r,i){ return i===0||roundStats(r).shot>0; }); }
+function flattenRounds(history){ var rows=[];
+  history.slice().sort(function(a,b){return a.date<b.date?-1:1;}).forEach(function(s){
+    usedRounds(s).forEach(function(r){ var st=roundStats(r); if(st.shot===0)return; rows.push({date:s.date,distance:r.distance,total:st.total,avg:st.total/st.shot}); }); });
+  return rows;
+}
+function myMonthlyBests(month){ var best={};
+  state.history.forEach(function(s){ if((s.date||"").slice(0,7)!==month)return;
+    usedRounds(s).forEach(function(r){ var st=roundStats(r); if(st.shot!==36)return; if(best[r.distance]==null||st.total>best[r.distance])best[r.distance]=st.total; }); });
+  return best;
+}
+function publishMonth(month,cb){
+  if(!DB.ready()||!state.playerName){ if(cb)cb(); return; }
+  var bests=myMonthlyBests(month);
+  var rows=Object.keys(bests).map(function(d){ return {player_id:state.playerId,name:state.playerName,distance:Number(d),month:month,score:bests[d]}; });
+  if(!rows.length){ if(cb)cb(); return; }
+  DB.upsert(rows).then(function(){ if(cb)cb(); }).catch(function(err){ if(cb)cb({error:{message:(err&&err.message)||"通信エラー"}}); });
+}
+function loadRanking(){
+  if(!DB.ready()){ render(); return; }
+  state.rankLoading=true; state.rankErr=""; render();
+  DB.select(state.rankMonth,state.rankDistance).then(function(data){ state.rankLoading=false; state.rankRows=data||[]; render(); })
+    .catch(function(err){ state.rankLoading=false; state.rankErr=(err&&err.message)||"通信エラー"; state.rankRows=[]; render(); });
+}
+
+/* ---------- 部品 ---------- */
+function scorecardHTML(round,stats,active){
+  var cols="22px repeat(6,1fr) 30px 36px";
+  var h='<div class="card"><div class="grid" style="grid-template-columns:'+cols+'"><div class="hd">E</div>';
+  [1,2,3,4,5,6].forEach(function(n){ h+='<div class="hd">'+n+'</div>'; });
+  h+='<div class="hd">計</div><div class="hd">累</div></div>';
+  round.ends.forEach(function(end,ei){
+    h+='<div class="grid" style="grid-template-columns:'+cols+';margin-top:4px"><div class="en">'+(ei+1)+'</div>';
+    end.forEach(function(a,ai){ var c=colorOf(a); var on=(active.end===ei&&active.arrow===ai)?" on":"";
+      var st=c?('background:'+c.bg+';color:'+c.fg+';border-color:'+c.line):"";
+      h+='<button class="cell'+on+'" style="'+st+'" data-action="selectcell" data-end="'+ei+'" data-arrow="'+ai+'">'+(a==null?"·":a)+'</button>'; });
+    var has=end.some(function(x){return x!=null;});
+    h+='<div class="sum">'+(has?stats.endTotals[ei]:"")+'</div><div class="cum">'+(has?stats.cumulative[ei]:"")+'</div></div>';
+  });
+  return h+'</div>';
+}
+function chartSVG(rows,metric){
+  if(!rows.length)return '';
+  var W=320,H=200,padL=30,padR=10,padT=10,padB=26,plotW=W-padL-padR,plotH=H-padT-padB,yMax=metric==="total"?360:10,n=rows.length;
+  var xAt=function(i){return n===1?padL+plotW/2:padL+(i/(n-1))*plotW;}, yAt=function(v){return padT+plotH-(v/yMax)*plotH;};
+  var dists=[]; rows.forEach(function(r){ if(dists.indexOf(r.distance)<0)dists.push(r.distance); }); dists.sort(function(a,b){return a-b;});
+  var svg='<svg viewBox="0 0 '+W+' '+H+'" width="100%" style="display:block">';
+  [0,yMax/2,yMax].forEach(function(v){ var y=yAt(v);
+    svg+='<line x1="'+padL+'" y1="'+y+'" x2="'+(W-padR)+'" y2="'+y+'" stroke="#eee"/><text x="'+(padL-4)+'" y="'+(y+3)+'" text-anchor="end" font-size="8" fill="#8a8a90">'+Math.round(v)+'</text>'; });
+  dists.forEach(function(d){ var pts=[];
+    rows.forEach(function(r,i){ if(r.distance===d){ var v=metric==="total"?r.total:r.avg; pts.push([xAt(i),yAt(v)]); } });
+    if(pts.length){ var col=DIST_COLOR[d]||"#888"; var pl=pts.map(function(p){return p[0].toFixed(1)+","+p[1].toFixed(1);}).join(" ");
+      svg+='<polyline points="'+pl+'" fill="none" stroke="'+col+'" stroke-width="2"/>';
+      pts.forEach(function(p){ svg+='<circle cx="'+p[0].toFixed(1)+'" cy="'+p[1].toFixed(1)+'" r="2.5" fill="'+col+'"/>'; }); }
+  });
+  var step=Math.ceil(n/8);
+  rows.forEach(function(r,i){ if(i%step===0||i===n-1) svg+='<text x="'+xAt(i).toFixed(1)+'" y="'+(H-10)+'" text-anchor="middle" font-size="8" fill="#8a8a90">'+shortDate(r.date)+'</text>'; });
+  svg+='</svg><div class="legend">';
+  dists.forEach(function(d){ svg+='<span class="lg"><span class="sw" style="background:'+(DIST_COLOR[d]||"#888")+'"></span>'+d+'m</span>'; });
+  return svg+'</div>';
+}
+
+/* ---------- 画面：ホーム（記録一覧＋Add） ---------- */
+function homeView(){
+  var h='<div style="padding:14px 16px 8px"><button class="add-btn" data-action="add">＋ 記録をつける</button></div>';
+  if(!state.history.length){
+    return h+'<div class="hist-empty"><div class="big">◎</div><div>まだ記録がありません。</div><div style="font-size:13px;margin-top:4px">上のボタンから始められます。</div></div>';
+  }
+  var rows=flattenRounds(state.history);
+  h+='<div style="padding:0 12px">';
+  h+='<div class="chartcard"><div class="chead"><div class="ctitle">スコアの推移</div><div class="seg">'
+    +'<button class="'+(state.metric==="total"?"on":"")+'" data-action="metric" data-metric="total">合計</button>'
+    +'<button class="'+(state.metric==="avg"?"on":"")+'" data-action="metric" data-metric="avg">平均</button></div></div>'
+    +chartSVG(rows,state.metric)+'<div class="cnote">'+(state.metric==="total"?"距離ごとに色分け。1ラウンド(360点満点)の合計。":"距離ごとに色分け。1射あたりの平均(10点満点)。")+'</div></div>';
+  state.history.slice().sort(function(a,b){return a.date<b.date?1:-1;}).forEach(function(s){
+    var used=usedRounds(s),gt=0,xs=0; used.forEach(function(r){ var st=roundStats(r); gt+=st.total; xs+=st.x; });
+    h+='<div class="hcard"><div class="head"><div class="date">'+jpDate(s.date)+'</div><div class="tot">'+gt+'<small> / '+(used.length*360)+'</small></div></div><div class="meta">';
+    used.forEach(function(r,i){ h+='<span>R'+(i+1)+' <b>'+r.distance+'m</b> '+roundStats(r).total+'点</span>'; });
+    h+='<span class="x">X '+xs+'</span></div><div class="acts">'
+      +'<button class="btn-ghost" style="flex:1;padding:10px" data-action="open" data-id="'+s.id+'">開く</button>'
+      +'<button class="btn-ghost" style="color:#c22a22;border-color:#e5b6b2;padding:10px" data-action="delete" data-id="'+s.id+'">削除</button></div></div>';
+  });
+  return h+'</div>';
+}
+
+/* ---------- 画面：距離選択 ---------- */
+function pickDistView(){
+  var idx=state.pickForRound;
+  var def = (state.session.rounds[idx] ? state.session.rounds[idx].distance : (state.session.rounds[0]?state.session.rounds[0].distance:18));
+  var h='<div class="flowhead"><button class="ibtn" data-action="pickback">←</button><div class="flowtitle">ラウンド'+(idx+1)+'の距離</div><div style="min-width:44px"></div></div>';
+  h+='<div style="padding:20px 16px 0">';
+  if(idx===0){ h+='<div class="row" style="padding-bottom:16px"><span class="lbl" style="min-width:34px">日付</span><input type="date" data-action="setdate" value="'+state.session.date+'" style="flex:1"></div>'; }
+  h+='<div class="lbl" style="padding:0 2px 10px">何mを射ちますか？</div><div class="distbig">';
+  DISTANCES.forEach(function(d){ h+='<button class="distbig-btn'+(def===d?" on":"")+'" data-action="pickdist" data-dist="'+d+'">'+d+'<small>m</small></button>'; });
+  return h+'</div></div>';
+}
+
+/* ---------- 画面：入力 ---------- */
+function inputView(){
+  var s=state.session,round=s.rounds[state.activeRound],stats=roundStats(round);
+  var h='<div class="flowhead"><button class="ibtn" data-action="cancelinput">✕</button>'
+    +'<button class="idist" data-action="redist">ラウンド'+(state.activeRound+1)+' ・ '+round.distance+'m ▾</button>'
+    +'<button class="ibtn" data-action="finishexit">終了</button></div>';
+  h+='<div class="wrap">'+scorecardHTML(round,stats,state.active)+'</div>';
+  h+='<div class="stats">'
+    +'<div class="stat"><div class="k">合計</div><div class="v">'+stats.total+'<small> /360</small></div></div>'
+    +'<div class="stat"><div class="k">平均</div><div class="v">'+(stats.shot?(stats.total/stats.shot).toFixed(1):"-")+'<small> /射</small></div></div>'
+    +'<div class="stat"><div class="k">10+X</div><div class="v">'+stats.tens+'</div></div>'
+    +'<div class="stat"><div class="k">X</div><div class="v">'+stats.x+'</div></div></div>';
+  h+='<div class="hint">第'+(state.active.end+1)+'エンド ・ '+(state.active.arrow+1)+'射目</div><div class="pad">';
+  PAD_ROWS.forEach(function(rowArr){ h+='<div class="pad-row">';
+    rowArr.forEach(function(sc){ var c=colorOf(sc); h+='<button class="pad-btn" style="background:'+c.bg+';color:'+c.fg+';border-color:'+c.line+'" data-action="score" data-score="'+sc+'">'+sc+'</button>'; });
+    h+='</div>'; });
+  h+='</div><div class="ctrls"><button class="ctrl" data-action="back">← 1つ戻す</button><button class="ctrl" data-action="clearcell">選択を消す</button></div>';
+  return h;
+}
+function sheetView(){
+  var s=state.session,r=roundStats(s.rounds[state.activeRound]),body;
+  if(state.sheet==="afterR1"){
+    body='<div class="sheet-title">ラウンド1 終了！ '+r.total+'点</div><div class="sheet-sub">この記録をどうしますか？</div>'
+      +'<button class="btn-dark sheet-btn" data-action="sheetround2">2ラウンド目へ</button>'
+      +'<button class="btn-ghost sheet-btn" data-action="sheetfinish">記録終了</button>';
+  } else {
+    var total=0; s.rounds.forEach(function(rr){ total+=roundStats(rr).total; });
+    body='<div class="sheet-title">おつかれさま！ 合計 '+total+'点</div><div class="sheet-sub">記録を保存して終わります。</div>'
+      +'<button class="btn-dark sheet-btn" data-action="sheetfinish">記録を保存して終了</button>';
+  }
+  return '<div class="scrim" data-action="sheetclose"></div><div class="sheet">'+body+'</div>';
+}
+
+/* ---------- 画面：ランキング ---------- */
+function rankingView(){
+  var h='<div style="padding:12px 12px">';
+  h+='<div class="card" style="margin-bottom:12px"><div class="row"><span class="lbl" style="min-width:64px">あなたの名前</span>'
+    +'<input type="text" maxlength="12" placeholder="例：吉田" value="'+escapeHtml(state.playerName)+'" data-action="setname" style="flex:1"></div>'
+    +'<div class="cnote">名前はこの端末に保存され、あなたのハイスコアと一緒に表示されます。</div></div>';
+  if(!DB.configured()){
+    return h+'<div class="card"><b>ランキングは初期設定が必要です</b><div style="font-size:13px;color:#555;margin-top:6px;line-height:1.7">ファイル冒頭の <code>SUPABASE_URL</code> と <code>SUPABASE_ANON_KEY</code> を設定すると有効になります。</div></div></div>';
+  }
+  h+='<div class="row" style="padding:0 0 8px"><span class="lbl" style="min-width:34px">月</span><input type="month" value="'+state.rankMonth+'" data-action="rankmonth" style="flex:1"></div>';
+  h+='<div class="dists" style="padding:0 0 10px">';
+  DISTANCES.forEach(function(d){ h+='<button class="dist '+(state.rankDistance===d?"on":"")+'" data-action="rankdist" data-dist="'+d+'">'+d+'m</button>'; });
+  h+='</div>';
+  h+='<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'
+    +'<div style="font-weight:700">'+monthLabel(state.rankMonth)+' ・ '+state.rankDistance+'m</div>'
+    +'<button class="btn-ghost" data-action="rankrefresh" style="padding:6px 10px;font-size:13px">更新</button></div>';
+  if(state.rankLoading){ h+='<div class="cnote">読み込み中…</div>'; }
+  else if(state.rankErr){ h+='<div style="color:#c22a22;font-size:13px">エラー：'+escapeHtml(state.rankErr)+'</div>'; }
+  else if(!state.rankRows||!state.rankRows.length){ h+='<div class="cnote">まだこの条件のスコアがありません。（36射そろった1ラウンドが対象です）</div>'; }
+  else {
+    state.rankRows.forEach(function(r,i){
+      var me=r.player_id===state.playerId, rc=i===0?"rank1":i===1?"rank2":i===2?"rank3":"", medal=i===0?"🥇":i===1?"🥈":i===2?"🥉":"";
+      h+='<div class="rrow '+rc+(me?" me":"")+'"><div class="rk">'+(medal||(i+1))+'</div>'
+        +'<div class="nm">'+escapeHtml(r.name)+(me?' <span class="youtag">(あなた)</span>':'')+'</div>'
+        +'<div class="sc">'+r.score+'<small> /360</small></div></div>';
+    });
+  }
+  h+='</div><div class="cnote">記録を保存すると、その月のあなたのハイスコアだけが自動で公開されます。1射ごとの詳細は公開されません。</div></div>';
+  return h;
+}
+
+/* ---------- 全体描画 ---------- */
+function topbar(active){
+  return '<div class="top"><div class="brand"><span class="dot">◎</span> スコア管理 <span style="font-size:11px;color:#9a9aa0;font-weight:400">v6</span></div><div class="tabs">'
+    +'<button class="tab '+(active==="home"?"on":"")+'" data-action="tab" data-view="home">記録</button>'
+    +'<button class="tab '+(active==="ranking"?"on":"")+'" data-action="tab" data-view="ranking">ランキング</button></div></div>';
+}
+function render(){
+  var y=window.scrollY,h="";
+  if(state.screen==="home"){ h=topbar("home")+homeView(); }
+  else if(state.screen==="ranking"){ h=topbar("ranking")+rankingView(); }
+  else if(state.screen==="pickdist"){ h=pickDistView(); }
+  else if(state.screen==="input"){ h=inputView(); if(state.sheet)h+=sheetView(); }
+  document.getElementById("app").innerHTML=h;
+  window.scrollTo(0,y);
+}
+function rerender(){ persistFlow(); render(); }
+
+/* ---------- フロー操作 ---------- */
+function startAdd(){ state.session={id:String(Date.now()),date:todayStr(),roundCount:1,rounds:[]}; state.creating=true; state.pickForRound=0; state.activeRound=0; state.active={end:0,arrow:0}; state.sheet=null; state.screen="pickdist"; window.scrollTo(0,0); rerender(); }
+function finishRecord(){
+  var s=state.session; if(!s){ state.screen="home"; rerender(); return; }
+  var shot=0; s.rounds.forEach(function(r){ shot+=roundStats(r).shot; });
+  if(shot>0){
+    s.roundCount=s.rounds.length; var id=s.id;
+    state.history=[clone(s)].concat(state.history.filter(function(h){return h.id!==id;}));
+    saveHistory();
+    var m=(s.date||"").slice(0,7);
+    if(DB.ready()&&state.playerName){ publishMonth(m,function(){}); }
+  }
+  state.session=null; state.sheet=null; state.creating=false; state.screen="home"; window.scrollTo(0,0); rerender();
+}
+
+/* ---------- イベント ---------- */
+var app=document.getElementById("app");
+app.addEventListener("change",function(e){ var t=e.target; if(!t.dataset)return; var a=t.dataset.action;
+  if(a==="setdate"){ state.session.date=t.value; persistFlow(); }
+  else if(a==="setname"){ state.playerName=(t.value||"").trim(); try{localStorage.setItem("archery_pname",state.playerName);}catch(x){} publishMonth(state.rankMonth,function(){ loadRanking(); }); }
+  else if(a==="rankmonth"){ state.rankMonth=t.value; loadRanking(); }
+});
+app.addEventListener("click",function(e){
+  var t=e.target.closest("[data-action]"); if(!t)return; var a=t.dataset.action;
+
+  if(a==="tab"){ state.screen=t.dataset.view; window.scrollTo(0,0); if(state.screen==="ranking"&&DB.ready()){ loadRanking(); } else { render(); } return; }
+  if(a==="metric"){ state.metric=t.dataset.metric; render(); return; }
+  if(a==="add"){ startAdd(); return; }
+
+  if(a==="pickdist"){ var d=+t.dataset.dist,idx=state.pickForRound;
+    if(state.session.rounds[idx]){ state.session.rounds[idx].distance=d; } else { state.session.rounds[idx]=emptyRound(d); }
+    state.activeRound=idx; state.active=firstEmpty(state.session.rounds[idx]); state.sheet=null; state.screen="input"; window.scrollTo(0,0); rerender(); return; }
+  if(a==="pickback"){ var i2=state.pickForRound, exists=state.session&&state.session.rounds[i2];
+    if(!exists){ if(i2===0){ state.session=null; state.creating=false; state.screen="home"; } else { state.screen="input"; state.activeRound=0; state.sheet="afterR1"; } }
+    else { state.screen="input"; state.activeRound=i2; state.sheet=null; }
+    window.scrollTo(0,0); rerender(); return; }
+
+  if(a==="redist"){ state.pickForRound=state.activeRound; state.screen="pickdist"; window.scrollTo(0,0); rerender(); return; }
+  if(a==="cancelinput"){ var sh=0; state.session.rounds.forEach(function(r){ sh+=roundStats(r).shot; });
+    if(sh>0 && !confirm("入力中の記録を破棄して戻りますか？（保存されません）"))return;
+    state.session=null; state.sheet=null; state.creating=false; state.screen="home"; window.scrollTo(0,0); rerender(); return; }
+  if(a==="finishexit"){ finishRecord(); return; }
+
+  if(a==="selectcell"){ state.active={end:+t.dataset.end,arrow:+t.dataset.arrow}; rerender(); return; }
+  if(a==="score"){ var round=state.session.rounds[state.activeRound];
+    var wasFull=round.ends.every(function(en){return en.every(function(x){return x!=null;});});
+    var sc=t.dataset.score,en=state.active.end,ar=state.active.arrow; round.ends[en][ar]=sc;
+    if(ar<5){ar++;} else if(en<5){en++;ar=0;} state.active={end:en,arrow:ar};
+    var isFull=round.ends.every(function(e2){return e2.every(function(x){return x!=null;});});
+    if(!wasFull&&isFull){ state.sheet=(state.activeRound===0&&state.session.rounds.length<2)?"afterR1":"afterLast"; }
+    rerender(); return; }
+  if(a==="back"){ var e3=state.active.end,a3=state.active.arrow; if(a3>0){a3--;} else if(e3>0){e3--;a3=5;}
+    state.session.rounds[state.activeRound].ends[e3][a3]=null; state.active={end:e3,arrow:a3}; rerender(); return; }
+  if(a==="clearcell"){ state.session.rounds[state.activeRound].ends[state.active.end][state.active.arrow]=null; rerender(); return; }
+
+  if(a==="sheetround2"){ state.pickForRound=1; state.sheet=null; state.screen="pickdist"; window.scrollTo(0,0); rerender(); return; }
+  if(a==="sheetfinish"){ finishRecord(); return; }
+  if(a==="sheetclose"){ state.sheet=null; rerender(); return; }
+
+  if(a==="open"){ var f=state.history.filter(function(h){return h.id===t.dataset.id;})[0];
+    if(f){ state.session=clone(f); state.creating=false; state.activeRound=0; state.active=firstEmpty(state.session.rounds[0]); state.sheet=null; state.screen="input"; window.scrollTo(0,0); rerender(); } return; }
+  if(a==="delete"){ if(confirm("この記録を削除します。よろしいですか？")){ state.history=state.history.filter(function(h){return h.id!==t.dataset.id;}); saveHistory(); render(); } return; }
+
+  if(a==="rankdist"){ state.rankDistance=+t.dataset.dist; loadRanking(); return; }
+  if(a==="rankrefresh"){ loadRanking(); return; }
+});
+
+render();
+</script>
+</body>
+</html>

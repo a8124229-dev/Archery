@@ -19,7 +19,7 @@
   .top { padding:14px 16px 10px; background:#232323; color:#fff; display:flex; align-items:center; justify-content:space-between; }
   .brand { font-weight:700; font-size:17px; } .brand .dot { color:#ffcf19; }
   .tabs { display:flex; gap:6px; }
-  .tab { padding:6px 14px; border-radius:999px; font-size:13px; border:none; cursor:pointer; background:rgba(255,255,255,.14); color:#fff; }
+  .tab { padding:6px 11px; border-radius:999px; font-size:12px; border:none; cursor:pointer; background:rgba(255,255,255,.14); color:#fff; }
   .tab.on { background:#ffcf19; color:#3a2e00; font-weight:700; }
 
   .flowhead { display:flex; align-items:center; justify-content:space-between; padding:12px; background:#232323; color:#fff; }
@@ -84,6 +84,9 @@
   .legend { display:flex; flex-wrap:wrap; gap:12px; padding:6px 6px 0; font-size:12px; color:#555; }
   .legend .lg { display:flex; align-items:center; gap:4px; } .legend .sw { width:12px; height:3px; border-radius:2px; }
   .cnote { font-size:11px; color:#8a8a90; padding:4px 6px; line-height:1.6; }
+  .ffcard { border-radius:14px; padding:12px 14px; margin-bottom:10px; }
+  .ffbtn { margin-top:10px; width:100%; padding:13px; border-radius:12px; border:none; cursor:pointer; font-weight:800; font-size:15px; color:#fff; background:linear-gradient(90deg,#ff8fbf,#ff5fa2); box-shadow:0 2px 6px rgba(255,95,162,.35); }
+  textarea { font-family:inherit; }
 
   .dists { display:flex; gap:6px; }
   .dist { flex:1; padding:8px 0; border-radius:8px; font-size:14px; cursor:pointer; border:1px solid #d3d0c8; background:#fff; color:#6b6b70; }
@@ -111,6 +114,13 @@
   .sheet-title { font-weight:800; font-size:18px; text-align:center; }
   .sheet-sub { font-size:13px; color:#6b6b70; text-align:center; margin:6px 0 14px; }
   .sheet-btn { display:block; width:100%; margin-top:8px; text-align:center; }
+  .ff-ta { width:100%; min-height:70px; padding:10px; border:1px solid #d3d0c8; border-radius:8px; font-size:15px; font-family:inherit; resize:vertical; margin:4px 0 10px; background:#fff; color:#232323; }
+  .ffcard { background:#fff; border:1px solid #d3d0c8; border-radius:12px; padding:12px 14px; margin-bottom:10px; }
+  .ffhead { font-weight:700; font-size:14px; margin-bottom:6px; }
+  .ffrow { font-size:14px; color:#333; line-height:1.6; margin-top:4px; display:flex; gap:6px; align-items:flex-start; }
+  .fftag { flex:none; font-size:11px; font-weight:700; color:#1c6a94; background:#e7f4fb; border-radius:5px; padding:2px 6px; }
+  .fftag.rf { color:#8a5a1a; background:#fbf0df; }
+  .ffopenbtn { margin-top:8px; font-size:13px; color:#4a4a4f; background:#f2f0ea; border:1px solid #d3d0c8; border-radius:8px; padding:6px 12px; cursor:pointer; }
 </style>
 </head>
 <body>
@@ -138,6 +148,13 @@ function colorOf(s){
 var PAD_ROWS=[["X","10","9"],["8","7"],["6","5"],["4","3"],["2","1"],["M"]];
 var DISTANCES=[18,30,50,70];
 var DIST_COLOR={18:"#2f9fd8",30:"#2fa84f",50:"#e5852d",70:"#c22a22"};
+var FF_BG=["#fff2f5","#eef6ff","#eefaf0","#fff6e8","#f4f0ff","#eafaf7"];
+var FF_BR=["#f6c6d3","#c6ddf5","#c6e6cc","#f5dcb0","#dccff0","#bfe9df"];
+function weekKey(d){ d=d?new Date(d):new Date(); var day=d.getDay(),diff=(day===0?-6:1-day);
+  var m=new Date(d.getFullYear(),d.getMonth(),d.getDate()+diff),pad=function(n){return String(n).padStart(2,"0");};
+  return m.getFullYear()+"-"+pad(m.getMonth()+1)+"-"+pad(m.getDate()); }
+function weekLabel(key){ var p=key.split("-"),mon=new Date(Number(p[0]),Number(p[1])-1,Number(p[2])),sun=new Date(mon); sun.setDate(mon.getDate()+6);
+  return (mon.getMonth()+1)+"/"+mon.getDate()+"〜"+(sun.getMonth()+1)+"/"+sun.getDate(); }
 function val(s){ return s==null?null:s==="M"?0:s==="X"?10:Number(s); }
 function todayStr(){ var d=new Date(),p=function(n){return String(n).padStart(2,"0");}; return d.getFullYear()+"-"+p(d.getMonth()+1)+"-"+p(d.getDate()); }
 function emptyRound(dist){ var e=function(){return [null,null,null,null,null,null];}; return {distance:dist,ends:[e(),e(),e(),e(),e(),e()]}; }
@@ -153,6 +170,17 @@ function firstEmpty(round){ for(var e=0;e<6;e++)for(var a=0;a<6;a++){ if(round.e
 function jpDate(s){ var a=s.split("-"); return a[0]+"年"+Number(a[1])+"月"+Number(a[2])+"日"; }
 function shortDate(s){ var a=s.split("-"); return Number(a[1])+"/"+Number(a[2]); }
 function monthLabel(m){ var a=m.split("-"); return a[0]+"年"+Number(a[1])+"月"; }
+function pad2(n){ return String(n).padStart(2,"0"); }
+function ymd(d){ return d.getFullYear()+"-"+pad2(d.getMonth()+1)+"-"+pad2(d.getDate()); }
+function mondayOf(dateStr){
+  var d = dateStr ? new Date(dateStr+"T00:00:00") : new Date();
+  var day = d.getDay();               // 0=日,1=月,...
+  var diff = (day===0 ? -6 : 1-day);  // その週の月曜へ
+  d.setDate(d.getDate()+diff);
+  return ymd(d);
+}
+function addDaysStr(s,n){ var d=new Date(s+"T00:00:00"); d.setDate(d.getDate()+n); return ymd(d); }
+function ffWeekLabel(s){ var a=s.split("-"); return Number(a[1])+"/"+Number(a[2]); }
 function escapeHtml(s){ return String(s==null?"":s).replace(/[&<>"']/g,function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); }
 
 /* ---------- 保存 ---------- */
@@ -176,6 +204,24 @@ var DB = {
     var url=SUPABASE_URL+"/rest/v1/highscores?on_conflict=player_id,distance,month";
     return fetch(url,{method:"POST",headers:this._h({"Content-Type":"application/json",Prefer:"resolution=merge-duplicates,return=minimal"}),body:JSON.stringify(rows)})
       .then(function(r){ if(!r.ok)return r.text().then(function(t){ throw new Error(t||("HTTP "+r.status)); }); return true; });
+  },
+  ffUpsert:function(row){
+    var url=SUPABASE_URL+"/rest/v1/feedforward?on_conflict=player_id,week";
+    return fetch(url,{method:"POST",headers:this._h({"Content-Type":"application/json",Prefer:"resolution=merge-duplicates,return=minimal"}),body:JSON.stringify([row])})
+      .then(function(r){ if(!r.ok)return r.text().then(function(t){ throw new Error(t||("HTTP "+r.status)); }); return true; });
+  },
+  ffMine:function(playerId){
+    var url=SUPABASE_URL+"/rest/v1/feedforward?select=name,week,goal,reflection,player_id&player_id=eq."+encodeURIComponent(playerId)+"&order=week.desc";
+    return fetch(url,{headers:this._h(),cache:"no-store"}).then(function(r){ if(!r.ok)return r.text().then(function(t){ throw new Error(t||("HTTP "+r.status)); }); return r.json(); });
+  },
+  ffSearch:function(term){
+    var pat="*"+encodeURIComponent(term)+"*";
+    var url=SUPABASE_URL+"/rest/v1/feedforward?select=name,week,goal,reflection,player_id&or=(goal.ilike."+pat+",reflection.ilike."+pat+")&order=week.desc&limit=60";
+    return fetch(url,{headers:this._h(),cache:"no-store"}).then(function(r){ if(!r.ok)return r.text().then(function(t){ throw new Error(t||("HTTP "+r.status)); }); return r.json(); });
+  },
+  ffRecent:function(){
+    var url=SUPABASE_URL+"/rest/v1/feedforward?select=name,week,goal,reflection,player_id&order=week.desc&limit=60";
+    return fetch(url,{headers:this._h(),cache:"no-store"}).then(function(r){ if(!r.ok)return r.text().then(function(t){ throw new Error(t||("HTTP "+r.status)); }); return r.json(); });
   }
 };
 
@@ -185,7 +231,9 @@ var state = {
   playerId: getPid(),
   playerName: localStorage.getItem("archery_pname") || "",
   screen: "home", creating:false, session:null, activeRound:0, active:{end:0,arrow:0}, pickForRound:0, sheet:null,
-  metric:"total", rankMonth: todayStr().slice(0,7), rankDistance:18, rankRows:null, rankLoading:false, rankErr:""
+  metric:"total", rankMonth: todayStr().slice(0,7), rankDistance:18, rankRows:null, rankLoading:false, rankErr:"",
+  ffWeek: mondayOf(), ffGoal:"", ffReflection:"", ffTab:"mine", ffMine:null, ffMineLoading:false, ffMineErr:"", ffSaved:false,
+  ffQuery:"", ffResults:null, ffSearchLoading:false, ffSearchErr:"", ffSearched:false
 };
 (function(){ var f=load("archery_flow_v2");
   if(f && f.session && (f.screen==="input"||f.screen==="pickdist")){
@@ -355,16 +403,88 @@ function rankingView(){
   return h;
 }
 
+/* ---------- 画面：フィードフォワード ---------- */
+function ffView(){
+  var h='<div style="padding:12px 12px">';
+  h+='<div style="text-align:center;padding:2px 0 12px"><div style="font-size:20px;font-weight:800">✍️ フィードフォワード</div>'
+    +'<div style="font-size:12px;color:#8a8a90;margin-top:2px">毎週の目標とふり返り</div></div>';
+  if(!DB.configured()){ return h+'<div class="card">ランキングと同じ初期設定が必要です。</div></div>'; }
+  if(!state.playerName){
+    h+='<div class="card" style="margin-bottom:12px"><div class="row"><span class="lbl" style="min-width:64px">あなたの名前</span>'
+      +'<input type="text" maxlength="12" placeholder="例：吉田" data-action="setname" style="flex:1"></div>'
+      +'<div class="cnote">名前を入れると書き込めます。</div></div>';
+    return h+'</div>';
+  }
+  h+='<div class="card" style="margin-bottom:12px">';
+  h+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">'
+    +'<button class="ffopenbtn" data-action="ffprev">‹ 前の週</button>'
+    +'<div style="font-weight:800;font-size:15px">'+ffWeekLabel(state.ffWeek)+'の週</div>'
+    +'<button class="ffopenbtn" data-action="ffnext">次の週 ›</button></div>';
+  h+='<div class="lbl">目標（射つ時に何を考えるか、具体的に）</div>';
+  h+='<textarea class="ff-ta" data-action="ffgoal" maxlength="300" placeholder="例：50を34ポンドでグルーピングできるよう押し手を意識する">'+escapeHtml(state.ffGoal)+'</textarea>';
+  h+='<div class="lbl">振り返り（できた・できなかった、詳しく）</div>';
+  h+='<textarea class="ff-ta" data-action="ffreflect" maxlength="300" placeholder="例：2秒で射てていない">'+escapeHtml(state.ffReflection)+'</textarea>';
+  h+='<button class="btn-dark" data-action="ffsave" style="width:100%">この週を保存</button>';
+  if(state.ffSaved){ h+='<div class="cnote" style="color:#2f7a3a">保存しました。</div>'; }
+  h+='</div>';
+  h+='<div class="seg" style="margin-bottom:10px">'
+    +'<button class="'+(state.ffTab==="mine"?"on":"")+'" data-action="fftab" data-fftab="mine" style="flex:1;padding:8px">自分の記録</button>'
+    +'<button class="'+(state.ffTab==="search"?"on":"")+'" data-action="fftab" data-fftab="search" style="flex:1;padding:8px">みんなから探す</button></div>';
+  if(state.ffTab==="mine"){
+    if(state.ffMineLoading){ h+='<div class="cnote">読み込み中…</div>'; }
+    else if(state.ffMineErr){ h+='<div style="color:#c22a22;font-size:13px">エラー：'+escapeHtml(state.ffMineErr)+'</div>'; }
+    else if(!state.ffMine||!state.ffMine.length){ h+='<div class="cnote">まだ記録がありません。上で今週のぶんを書いて保存してみましょう。</div>'; }
+    else { state.ffMine.forEach(function(e){ h+=ffEntryCard(e,false,true); }); }
+  } else {
+    h+='<div class="card" style="margin-bottom:10px"><div style="display:flex;gap:6px">'
+      +'<input type="text" placeholder="悩み・目標で検索（例：早切れ）" value="'+escapeHtml(state.ffQuery)+'" data-action="ffquery" style="flex:1">'
+      +'<button class="btn-dark" data-action="ffsearchbtn" style="padding:8px 14px">検索</button></div>'
+      +'<div class="cnote">空のまま検索すると、みんなの最近の記録が出ます。同じ悩みを解決した人が見つかるかも。</div></div>';
+    if(state.ffSearchLoading){ h+='<div class="cnote">検索中…</div>'; }
+    else if(state.ffSearchErr){ h+='<div style="color:#c22a22;font-size:13px">エラー：'+escapeHtml(state.ffSearchErr)+'</div>'; }
+    else if(state.ffSearched && (!state.ffResults||!state.ffResults.length)){ h+='<div class="cnote">見つかりませんでした。別の言葉でも試してみてください。</div>'; }
+    else if(state.ffResults){ state.ffResults.forEach(function(e){ h+=ffEntryCard(e,true,false); }); }
+  }
+  return h+'</div>';
+}
+function ffEntryCard(e,showName,mine){
+  var h='<div class="ffcard" style="background:#fff;border:1px solid #d3d0c8"><div class="ffhead">'+(showName?('<b>'+escapeHtml(e.name)+'</b> ・ '):'')+ffWeekLabel(e.week)+'の週</div>';
+  if(e.goal) h+='<div class="ffrow"><span class="fftag">目標</span><span>'+escapeHtml(e.goal)+'</span></div>';
+  if(e.reflection) h+='<div class="ffrow"><span class="fftag rf">ふり返り</span><span>'+escapeHtml(e.reflection)+'</span></div>';
+  if(mine) h+='<button class="ffopenbtn" data-action="ffopen" data-week="'+e.week+'">この週を編集</button>';
+  return h+'</div>';
+}
+function prefillFFWeek(){
+  var e=(state.ffMine||[]).filter(function(x){return x.week===state.ffWeek;})[0];
+  state.ffGoal=e?(e.goal||""):""; state.ffReflection=e?(e.reflection||""):"";
+}
+function loadFFMine(){
+  if(!DB.ready()){ render(); return; }
+  state.ffMineLoading=true; state.ffMineErr=""; render();
+  DB.ffMine(state.playerId).then(function(data){ state.ffMineLoading=false; state.ffMine=data||[]; prefillFFWeek(); render(); })
+    .catch(function(err){ state.ffMineLoading=false; state.ffMineErr=(err&&err.message)||"通信エラー"; state.ffMine=[]; render(); });
+}
+function loadFFSearch(){
+  if(!DB.ready()){ render(); return; }
+  state.ffSearchLoading=true; state.ffSearchErr=""; state.ffSearched=true; render();
+  var q=(state.ffQuery||"").trim();
+  var p=q?DB.ffSearch(q):DB.ffRecent();
+  p.then(function(data){ state.ffSearchLoading=false; state.ffResults=data||[]; render(); })
+   .catch(function(err){ state.ffSearchLoading=false; state.ffSearchErr=(err&&err.message)||"通信エラー"; state.ffResults=[]; render(); });
+}
+
 /* ---------- 全体描画 ---------- */
 function topbar(active){
-  return '<div class="top"><div class="brand"><span class="dot">◎</span> スコア管理 <span style="font-size:11px;color:#9a9aa0;font-weight:400">v6</span></div><div class="tabs">'
+  return '<div class="top"><div class="brand"><span class="dot">◎</span> スコア <span style="font-size:11px;color:#9a9aa0;font-weight:400">v8</span></div><div class="tabs">'
     +'<button class="tab '+(active==="home"?"on":"")+'" data-action="tab" data-view="home">記録</button>'
-    +'<button class="tab '+(active==="ranking"?"on":"")+'" data-action="tab" data-view="ranking">ランキング</button></div></div>';
+    +'<button class="tab '+(active==="ranking"?"on":"")+'" data-action="tab" data-view="ranking">ランキング</button>'
+    +'<button class="tab '+(active==="ff"?"on":"")+'" data-action="tab" data-view="ff">週目標</button></div></div>';
 }
 function render(){
   var y=window.scrollY,h="";
   if(state.screen==="home"){ h=topbar("home")+homeView(); }
   else if(state.screen==="ranking"){ h=topbar("ranking")+rankingView(); }
+  else if(state.screen==="ff"){ h=topbar("ff")+ffView(); }
   else if(state.screen==="pickdist"){ h=pickDistView(); }
   else if(state.screen==="input"){ h=inputView(); if(state.sheet)h+=sheetView(); }
   document.getElementById("app").innerHTML=h;
@@ -391,13 +511,20 @@ function finishRecord(){
 var app=document.getElementById("app");
 app.addEventListener("change",function(e){ var t=e.target; if(!t.dataset)return; var a=t.dataset.action;
   if(a==="setdate"){ state.session.date=t.value; persistFlow(); }
-  else if(a==="setname"){ state.playerName=(t.value||"").trim(); try{localStorage.setItem("archery_pname",state.playerName);}catch(x){} publishMonth(state.rankMonth,function(){ loadRanking(); }); }
+  else if(a==="setname"){ state.playerName=(t.value||"").trim(); try{localStorage.setItem("archery_pname",state.playerName);}catch(x){}
+    publishMonth(state.rankMonth,function(){ if(state.screen==="ff"){ loadFFMine(); } else if(state.screen==="ranking"){ loadRanking(); } else { render(); } }); }
+  else if(a==="ffgoal"){ state.ffGoal=t.value; }
+  else if(a==="ffreflect"){ state.ffReflection=t.value; }
+  else if(a==="ffquery"){ state.ffQuery=t.value; }
   else if(a==="rankmonth"){ state.rankMonth=t.value; loadRanking(); }
 });
 app.addEventListener("click",function(e){
   var t=e.target.closest("[data-action]"); if(!t)return; var a=t.dataset.action;
 
-  if(a==="tab"){ state.screen=t.dataset.view; window.scrollTo(0,0); if(state.screen==="ranking"&&DB.ready()){ loadRanking(); } else { render(); } return; }
+  if(a==="tab"){ state.screen=t.dataset.view; window.scrollTo(0,0);
+    if(state.screen==="ranking"&&DB.ready()){ loadRanking(); }
+    else if(state.screen==="ff"&&DB.ready()){ loadFFMine(); if(state.ffTab==="search"&&state.ffResults===null){ loadFFSearch(); } }
+    else { render(); } return; }
   if(a==="metric"){ state.metric=t.dataset.metric; render(); return; }
   if(a==="add"){ startAdd(); return; }
 
@@ -437,6 +564,21 @@ app.addEventListener("click",function(e){
 
   if(a==="rankdist"){ state.rankDistance=+t.dataset.dist; loadRanking(); return; }
   if(a==="rankrefresh"){ loadRanking(); return; }
+  if(a==="fftab"){ state.ffTab=t.dataset.fftab; if(state.ffTab==="search"&&state.ffResults===null){ loadFFSearch(); } else { render(); } return; }
+  if(a==="ffprev"){ state.ffWeek=addDaysStr(state.ffWeek,-7); state.ffSaved=false; prefillFFWeek(); render(); return; }
+  if(a==="ffnext"){ state.ffWeek=addDaysStr(state.ffWeek,7); state.ffSaved=false; prefillFFWeek(); render(); return; }
+  if(a==="ffopen"){ state.ffWeek=t.dataset.week; state.ffSaved=false; state.ffTab="mine"; prefillFFWeek(); window.scrollTo(0,0); render(); return; }
+  if(a==="ffsearchbtn"){ var qi=document.querySelector('[data-action=ffquery]'); if(qi) state.ffQuery=qi.value; loadFFSearch(); return; }
+  if(a==="ffsave"){
+    if(!state.playerName){ alert("先に名前を入れてね。"); return; }
+    var gg=document.querySelector('[data-action=ffgoal]'), rr=document.querySelector('[data-action=ffreflect]');
+    if(gg) state.ffGoal=gg.value; if(rr) state.ffReflection=rr.value;
+    if(!state.ffGoal.trim() && !state.ffReflection.trim()){ alert("目標かふり返りを入力してね。"); return; }
+    DB.ffUpsert({player_id:state.playerId,name:state.playerName,week:state.ffWeek,goal:state.ffGoal,reflection:state.ffReflection})
+      .then(function(){ state.ffSaved=true; loadFFMine(); })
+      .catch(function(err){ alert("保存でエラー：\n"+((err&&err.message)||"通信エラー")); });
+    return;
+  }
 });
 
 render();

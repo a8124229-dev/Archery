@@ -121,6 +121,8 @@
   .fftag { flex:none; font-size:11px; font-weight:700; color:#1c6a94; background:#e7f4fb; border-radius:5px; padding:2px 6px; }
   .fftag.rf { color:#8a5a1a; background:#fbf0df; }
   .ffopenbtn { margin-top:8px; font-size:13px; color:#4a4a4f; background:#f2f0ea; border:1px solid #d3d0c8; border-radius:8px; padding:6px 12px; cursor:pointer; }
+  .tapcard { cursor:pointer; }
+  .tapcard:active { background:#f7f5ef; }
 </style>
 </head>
 <body>
@@ -233,7 +235,8 @@ var state = {
   screen: "home", creating:false, session:null, activeRound:0, active:{end:0,arrow:0}, pickForRound:0, sheet:null,
   metric:"total", rankMonth: todayStr().slice(0,7), rankDistance:18, rankRows:null, rankLoading:false, rankErr:"",
   ffWeek: mondayOf(), ffGoal:"", ffReflection:"", ffTab:"mine", ffMine:null, ffMineLoading:false, ffMineErr:"", ffSaved:false,
-  ffQuery:"", ffResults:null, ffSearchLoading:false, ffSearchErr:"", ffSearched:false
+  ffQuery:"", ffResults:null, ffSearchLoading:false, ffSearchErr:"", ffSearched:false,
+  nameSaved:false, ffPerson:null, ffPersonRows:null, ffPersonLoading:false, ffPersonErr:""
 };
 (function(){ var f=load("archery_flow_v2");
   if(f && f.session && (f.screen==="input"||f.screen==="pickdist")){
@@ -436,14 +439,23 @@ function ffView(){
     else if(!state.ffMine||!state.ffMine.length){ h+='<div class="cnote">まだ記録がありません。上で今週のぶんを書いて保存してみましょう。</div>'; }
     else { state.ffMine.forEach(function(e){ h+=ffEntryCard(e,false,true); }); }
   } else {
-    h+='<div class="card" style="margin-bottom:10px"><div style="display:flex;gap:6px">'
-      +'<input type="text" placeholder="悩み・目標で検索（例：早切れ）" value="'+escapeHtml(state.ffQuery)+'" data-action="ffquery" style="flex:1">'
-      +'<button class="btn-dark" data-action="ffsearchbtn" style="padding:8px 14px">検索</button></div>'
-      +'<div class="cnote">空のまま検索すると、みんなの最近の記録が出ます。同じ悩みを解決した人が見つかるかも。</div></div>';
-    if(state.ffSearchLoading){ h+='<div class="cnote">検索中…</div>'; }
-    else if(state.ffSearchErr){ h+='<div style="color:#c22a22;font-size:13px">エラー：'+escapeHtml(state.ffSearchErr)+'</div>'; }
-    else if(state.ffSearched && (!state.ffResults||!state.ffResults.length)){ h+='<div class="cnote">見つかりませんでした。別の言葉でも試してみてください。</div>'; }
-    else if(state.ffResults){ state.ffResults.forEach(function(e){ h+=ffEntryCard(e,true,false); }); }
+    if(state.ffPerson){
+      h+='<button class="ffopenbtn" data-action="ffpersonback" style="margin-bottom:10px">‹ みんなにもどる</button>';
+      h+='<div style="font-weight:800;margin:2px 2px 8px">'+escapeHtml(state.ffPerson.name)+' さんの記録</div>';
+      if(state.ffPersonLoading){ h+='<div class="cnote">読み込み中…</div>'; }
+      else if(state.ffPersonErr){ h+='<div style="color:#c22a22;font-size:13px">エラー：'+escapeHtml(state.ffPersonErr)+'</div>'; }
+      else if(!state.ffPersonRows||!state.ffPersonRows.length){ h+='<div class="cnote">記録がありません。</div>'; }
+      else { state.ffPersonRows.forEach(function(e){ h+=ffEntryCard(e,false,false); }); }
+    } else {
+      h+='<div class="card" style="margin-bottom:10px"><div style="display:flex;gap:6px">'
+        +'<input type="text" placeholder="悩み・目標で検索（例：早切れ）" value="'+escapeHtml(state.ffQuery)+'" data-action="ffquery" style="flex:1">'
+        +'<button class="btn-dark" data-action="ffsearchbtn" style="padding:8px 14px">検索</button></div>'
+        +'<div class="cnote">各メンバー1枚（最新の週）が出ます。タップするとその人の全記録が見られます。空のまま検索すると、みんなの最近の記録が出ます。</div></div>';
+      if(state.ffSearchLoading){ h+='<div class="cnote">検索中…</div>'; }
+      else if(state.ffSearchErr){ h+='<div style="color:#c22a22;font-size:13px">エラー：'+escapeHtml(state.ffSearchErr)+'</div>'; }
+      else if(state.ffSearched && (!state.ffResults||!state.ffResults.length)){ h+='<div class="cnote">見つかりませんでした。別の言葉でも試してみてください。</div>'; }
+      else if(state.ffResults){ aggregateLatest(state.ffResults).forEach(function(e){ h+=ffPersonCard(e); }); }
+    }
   }
   return h+'</div>';
 }
@@ -466,6 +478,7 @@ function loadFFMine(){
 }
 function loadFFSearch(){
   if(!DB.ready()){ render(); return; }
+  state.ffPerson=null;
   state.ffSearchLoading=true; state.ffSearchErr=""; state.ffSearched=true; render();
   var q=(state.ffQuery||"").trim();
   var p=q?DB.ffSearch(q):DB.ffRecent();
@@ -473,16 +486,64 @@ function loadFFSearch(){
    .catch(function(err){ state.ffSearchLoading=false; state.ffSearchErr=(err&&err.message)||"通信エラー"; state.ffResults=[]; render(); });
 }
 
+/* ---------- 画面：オンボーディング / 設定 ---------- */
+function onboardingView(){
+  return '<div class="top"><div class="brand"><span class="dot">◎</span> スコア管理</div></div>'
+    +'<div style="padding:44px 20px 20px;text-align:center">'
+    +'<div style="font-size:46px">🎯</div>'
+    +'<div style="font-size:20px;font-weight:800;margin:10px 0 4px">アーチェリー スコア管理</div>'
+    +'<div style="color:#8a8a90;font-size:13px;line-height:1.7;margin-bottom:22px">はじめに名前を登録してください。<br>ランキングと週目標に、この名前で表示されます。</div>'
+    +'<div class="card" style="text-align:left">'
+    +'<div class="lbl">あなたの名前</div>'
+    +'<input type="text" id="obname" maxlength="12" placeholder="例：吉田" style="width:100%;margin:6px 0 12px">'
+    +'<button class="btn-dark" data-action="startapp" style="width:100%">はじめる</button>'
+    +'<div class="cnote">部内でわかる名前（名字など）がおすすめ。あとから設定（⚙）で変更できます。</div>'
+    +'</div></div>';
+}
+function settingsView(){
+  var h='<div style="padding:16px 14px">';
+  h+='<div style="font-size:18px;font-weight:800;margin-bottom:12px">⚙ 設定</div>';
+  h+='<div class="card"><div class="lbl">あなたの名前</div>'
+    +'<input type="text" id="setname_input" maxlength="12" value="'+escapeHtml(state.playerName)+'" style="width:100%;margin:6px 0 12px">'
+    +'<button class="btn-dark" data-action="savename" style="width:100%">名前を保存</button>'
+    +(state.nameSaved
+      ?'<div class="cnote" style="color:#2f7a3a">保存しました。ランキングと週目標にも反映されます。</div>'
+      :'<div class="cnote">変更すると、ランキングと週目標の表示名も新しい名前になります。</div>')
+    +'</div>';
+  h+='<button class="btn-ghost" data-action="tab" data-view="home" style="width:100%;margin-top:14px">← 記録にもどる</button>';
+  return h+'</div>';
+}
+
+/* ---------- FF：人ごとに集約 ---------- */
+function aggregateLatest(rows){
+  var map={},order=[];
+  (rows||[]).forEach(function(r){ var k=r.player_id;
+    if(!map[k]){ map[k]={name:r.name,player_id:k,week:r.week,goal:r.goal,reflection:r.reflection}; order.push(k); }
+    else if(r.week>map[k].week){ map[k].week=r.week; map[k].goal=r.goal; map[k].reflection=r.reflection; } });
+  return order.map(function(k){ return map[k]; });
+}
+function ffPersonCard(e){
+  var h='<div class="ffcard tapcard" style="background:#fff;border:1px solid #d3d0c8" data-action="ffperson" data-pid="'+escapeHtml(e.player_id)+'" data-name="'+escapeHtml(e.name)+'">';
+  h+='<div class="ffhead" style="display:flex;justify-content:space-between;align-items:center"><span><b>'+escapeHtml(e.name)+'</b> ・ '+ffWeekLabel(e.week)+'の週</span><span style="color:#8a8a90;font-size:18px">›</span></div>';
+  if(e.goal) h+='<div class="ffrow"><span class="fftag">目標</span><span>'+escapeHtml(e.goal)+'</span></div>';
+  if(e.reflection) h+='<div class="ffrow"><span class="fftag rf">ふり返り</span><span>'+escapeHtml(e.reflection)+'</span></div>';
+  h+='<div class="cnote" style="color:#1c6a94;padding-top:6px">タップで '+escapeHtml(e.name)+' さんの記録をすべて見る</div>';
+  return h+'</div>';
+}
+
 /* ---------- 全体描画 ---------- */
 function topbar(active){
-  return '<div class="top"><div class="brand"><span class="dot">◎</span> スコア <span style="font-size:11px;color:#9a9aa0;font-weight:400">v8</span></div><div class="tabs">'
+  return '<div class="top"><div class="brand"><span class="dot">◎</span> <span style="font-size:11px;color:#9a9aa0;font-weight:400">v9</span></div><div class="tabs">'
     +'<button class="tab '+(active==="home"?"on":"")+'" data-action="tab" data-view="home">記録</button>'
     +'<button class="tab '+(active==="ranking"?"on":"")+'" data-action="tab" data-view="ranking">ランキング</button>'
-    +'<button class="tab '+(active==="ff"?"on":"")+'" data-action="tab" data-view="ff">週目標</button></div></div>';
+    +'<button class="tab '+(active==="ff"?"on":"")+'" data-action="tab" data-view="ff">週目標</button>'
+    +'<button class="tab '+(active==="settings"?"on":"")+'" data-action="tab" data-view="settings">⚙</button></div></div>';
 }
 function render(){
   var y=window.scrollY,h="";
-  if(state.screen==="home"){ h=topbar("home")+homeView(); }
+  if(!state.playerName){ h=onboardingView(); }
+  else if(state.screen==="settings"){ h=topbar("settings")+settingsView(); }
+  else if(state.screen==="home"){ h=topbar("home")+homeView(); }
   else if(state.screen==="ranking"){ h=topbar("ranking")+rankingView(); }
   else if(state.screen==="ff"){ h=topbar("ff")+ffView(); }
   else if(state.screen==="pickdist"){ h=pickDistView(); }
@@ -522,11 +583,21 @@ app.addEventListener("click",function(e){
   var t=e.target.closest("[data-action]"); if(!t)return; var a=t.dataset.action;
 
   if(a==="tab"){ state.screen=t.dataset.view; window.scrollTo(0,0);
-    if(state.screen==="ranking"&&DB.ready()){ loadRanking(); }
+    if(state.screen==="settings"){ state.nameSaved=false; render(); }
+    else if(state.screen==="ranking"&&DB.ready()){ loadRanking(); }
     else if(state.screen==="ff"&&DB.ready()){ loadFFMine(); if(state.ffTab==="search"&&state.ffResults===null){ loadFFSearch(); } }
     else { render(); } return; }
   if(a==="metric"){ state.metric=t.dataset.metric; render(); return; }
   if(a==="add"){ startAdd(); return; }
+
+  if(a==="startapp"){ var obn=document.getElementById("obname"); var nm=(obn?obn.value:"").trim();
+    if(!nm){ alert("名前を入れてね。"); return; }
+    state.playerName=nm; try{localStorage.setItem("archery_pname",nm);}catch(x){}
+    state.screen="home"; publishMonth(state.rankMonth,function(){ render(); }); return; }
+  if(a==="savename"){ var sni=document.getElementById("setname_input"); var nm2=(sni?sni.value:"").trim();
+    if(!nm2){ alert("名前を入れてね。"); return; }
+    state.playerName=nm2; try{localStorage.setItem("archery_pname",nm2);}catch(x){}
+    state.nameSaved=true; publishMonth(state.rankMonth,function(){ render(); }); return; }
 
   if(a==="pickdist"){ var d=+t.dataset.dist,idx=state.pickForRound;
     if(state.session.rounds[idx]){ state.session.rounds[idx].distance=d; } else { state.session.rounds[idx]=emptyRound(d); }
@@ -564,11 +635,15 @@ app.addEventListener("click",function(e){
 
   if(a==="rankdist"){ state.rankDistance=+t.dataset.dist; loadRanking(); return; }
   if(a==="rankrefresh"){ loadRanking(); return; }
-  if(a==="fftab"){ state.ffTab=t.dataset.fftab; if(state.ffTab==="search"&&state.ffResults===null){ loadFFSearch(); } else { render(); } return; }
+  if(a==="fftab"){ state.ffTab=t.dataset.fftab; state.ffPerson=null; if(state.ffTab==="search"&&state.ffResults===null){ loadFFSearch(); } else { render(); } return; }
   if(a==="ffprev"){ state.ffWeek=addDaysStr(state.ffWeek,-7); state.ffSaved=false; prefillFFWeek(); render(); return; }
   if(a==="ffnext"){ state.ffWeek=addDaysStr(state.ffWeek,7); state.ffSaved=false; prefillFFWeek(); render(); return; }
   if(a==="ffopen"){ state.ffWeek=t.dataset.week; state.ffSaved=false; state.ffTab="mine"; prefillFFWeek(); window.scrollTo(0,0); render(); return; }
   if(a==="ffsearchbtn"){ var qi=document.querySelector('[data-action=ffquery]'); if(qi) state.ffQuery=qi.value; loadFFSearch(); return; }
+  if(a==="ffperson"){ state.ffPerson={pid:t.dataset.pid,name:t.dataset.name}; state.ffPersonRows=null; state.ffPersonErr=""; state.ffPersonLoading=true; window.scrollTo(0,0); render();
+    DB.ffMine(t.dataset.pid).then(function(data){ state.ffPersonLoading=false; state.ffPersonRows=data||[]; render(); })
+      .catch(function(err){ state.ffPersonLoading=false; state.ffPersonErr=(err&&err.message)||"通信エラー"; state.ffPersonRows=[]; render(); }); return; }
+  if(a==="ffpersonback"){ state.ffPerson=null; render(); return; }
   if(a==="ffsave"){
     if(!state.playerName){ alert("先に名前を入れてね。"); return; }
     var gg=document.querySelector('[data-action=ffgoal]'), rr=document.querySelector('[data-action=ffreflect]');

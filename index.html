@@ -269,6 +269,19 @@ var DB = {
     var url=SUPABASE_URL+"/rest/v1/ff_reactions";
     return fetch(url,{method:"POST",headers:this._h({"Content-Type":"application/json",Prefer:"return=minimal"}),body:JSON.stringify([row])})
       .then(function(r){ if(!r.ok)return r.text().then(function(t){ throw new Error(t||("HTTP "+r.status)); }); return true; });
+  },
+  membersAll:function(){
+    var url=SUPABASE_URL+"/rest/v1/members?select=player_id,name&order=name.asc";
+    return fetch(url,{headers:this._h(),cache:"no-store"}).then(function(r){ if(!r.ok)return r.text().then(function(t){ throw new Error(t||("HTTP "+r.status)); }); return r.json(); });
+  },
+  memberUpsert:function(row){
+    var url=SUPABASE_URL+"/rest/v1/members?on_conflict=player_id";
+    return fetch(url,{method:"POST",headers:this._h({"Content-Type":"application/json",Prefer:"resolution=merge-duplicates,return=minimal"}),body:JSON.stringify([row])})
+      .then(function(r){ if(!r.ok)return r.text().then(function(t){ throw new Error(t||("HTTP "+r.status)); }); return true; });
+  },
+  ffByWeek:function(week){
+    var url=SUPABASE_URL+"/rest/v1/feedforward?select=player_id,name,goal,reflection&week=eq."+encodeURIComponent(week)+"&limit=300";
+    return fetch(url,{headers:this._h(),cache:"no-store"}).then(function(r){ if(!r.ok)return r.text().then(function(t){ throw new Error(t||("HTTP "+r.status)); }); return r.json(); });
   }
 };
 
@@ -283,7 +296,7 @@ var state = {
   ffQuery:"", ffResults:null, ffSearchLoading:false, ffSearchErr:"", ffSearched:false,
   nameSaved:false, ffPerson:null, ffPersonRows:null, ffPersonLoading:false, ffPersonErr:"",
   rankArrows:36, pbMsg:"", ffCategory:"", ffPersonReactions:null, ffMineReactions:null,
-  importText:""
+  importText:"", members:null, ffEntrants:null
 };
 (function(){ var f=load("archery_flow_v2");
   if(f && f.session && (f.screen==="input"||f.screen==="pickdist")){
@@ -344,6 +357,12 @@ function loadRanking(){
   p.then(function(data){ state.rankLoading=false; state.rankRows=data||[]; render(); })
     .catch(function(err){ state.rankLoading=false; state.rankErr=(err&&err.message)||"通信エラー"; state.rankRows=[]; render(); });
 }
+function registerMember(){ if(!DB.ready()||!state.playerName)return; DB.memberUpsert({player_id:state.playerId,name:state.playerName}).then(function(){ state.members=null; }).catch(function(){}); }
+function loadMembers(){ if(!DB.ready())return; DB.membersAll().then(function(d){ state.members=d||[]; render(); }).catch(function(){ if(state.members==null)state.members=[]; }); }
+function loadFFEntrants(week){ if(!DB.ready())return; DB.ffByWeek(week).then(function(d){
+    var pids={}; (d||[]).forEach(function(x){ if((x.goal&&x.goal.trim())||(x.reflection&&x.reflection.trim()))pids[x.player_id]=1; });
+    state.ffEntrants={week:week,pids:pids}; render(); }).catch(function(){}); }
+function notEnteredNames(enteredPidSet){ return (state.members||[]).filter(function(m){ return !enteredPidSet[m.player_id]; }).map(function(m){ return m.name; }); }
 
 /* ---------- 部品 ---------- */
 function scorecardHTML(round,stats,active){
@@ -500,7 +519,12 @@ function rankingView(){
         +'<div class="sc">'+r.score+'<small> /'+denom+'</small></div></div>';
     });
   }
-  h+='</div><div class="cnote">記録を保存すると、その月のあなたのハイスコアだけが自動で公開されます。1射ごとの詳細は公開されません。</div></div>';
+  h+='</div>';
+  var rent={}; (state.rankRows||[]).forEach(function(rr){rent[rr.player_id]=1;});
+  if(state.members&&state.members.length){ var rmiss=notEnteredNames(rent);
+    h+='<div class="card" style="margin-top:10px"><div style="font-weight:700;font-size:13px;margin-bottom:6px">まだ入力していない人（'+monthLabel(state.rankMonth)+'・'+state.rankDistance+'m・'+state.rankArrows+'射）</div>'
+      +(rmiss.length?('<div style="font-size:14px;color:#555;line-height:1.9">'+rmiss.map(escapeHtml).join('、')+'</div>'):'<div class="cnote" style="color:#2f7a3a;padding:0">全員入力済みです！</div>')+'</div>'; }
+  h+='<div class="cnote">記録を保存すると、その月のあなたのハイスコアだけが自動で公開されます。1射ごとの詳細は公開されません。</div></div>';
   return h;
 }
 
@@ -536,6 +560,12 @@ function ffView(){
   h+='<button class="btn-dark" data-action="ffsave" style="width:100%">この週を保存</button>';
   if(state.ffSaved){ h+='<div class="cnote" style="color:#2f7a3a">保存しました。</div>'; }
   h+='</div>';
+  if(state.members&&state.members.length){
+    var fent=(state.ffEntrants&&state.ffEntrants.week===state.ffWeek)?state.ffEntrants.pids:null;
+    if(fent){ var fmiss=notEnteredNames(fent);
+      h+='<div class="card" style="margin-bottom:10px"><div style="font-weight:700;font-size:13px;margin-bottom:6px">'+ffWeekLabel(state.ffWeek)+'の週 まだ書いていない人</div>'
+        +(fmiss.length?('<div style="font-size:14px;color:#555;line-height:1.9">'+fmiss.map(escapeHtml).join('、')+'</div>'):'<div class="cnote" style="color:#2f7a3a;padding:0">全員記入済みです！</div>')+'</div>'; }
+  }
   h+='<div class="seg" style="margin-bottom:10px">'
     +'<button class="'+(state.ffTab==="mine"?"on":"")+'" data-action="fftab" data-fftab="mine" style="flex:1;padding:8px">自分の記録</button>'
     +'<button class="'+(state.ffTab==="search"?"on":"")+'" data-action="fftab" data-fftab="search" style="flex:1;padding:8px">みんなから探す</button></div>';
@@ -594,6 +624,7 @@ function prefillFFWeek(){
 function loadFFMine(){
   if(!DB.ready()){ render(); return; }
   state.ffMineLoading=true; state.ffMineErr=""; render();
+  if(state.members==null)loadMembers(); loadFFEntrants(state.ffWeek);
   DB.ffMine(state.playerId).then(function(data){ state.ffMineLoading=false; state.ffMine=data||[]; prefillFFWeek(); render();
     DB.ffReactions(state.playerId).then(function(rx){ state.ffMineReactions=groupReactions(rx); render(); }).catch(function(){}); })
     .catch(function(err){ state.ffMineLoading=false; state.ffMineErr=(err&&err.message)||"通信エラー"; state.ffMine=[]; render(); });
@@ -670,7 +701,7 @@ function ffPersonCard(e){
 /* ---------- 全体描画 ---------- */
 function topHeader(title){
   return '<div class="top"><div class="brand"><span class="dot">◎</span> '+title
-    +' <span style="font-size:11px;color:#9a9aa0;font-weight:400">v11</span></div></div>';
+    +' <span style="font-size:11px;color:#9a9aa0;font-weight:400">v12</span></div></div>';
 }
 function bottomNav(active){
   var items=[["home","記録","🎯"],["ranking","ランキング","🏆"],["ff","週目標","✍️"],["settings","設定","⚙️"]];
@@ -731,7 +762,7 @@ app.addEventListener("click",function(e){
 
   if(a==="tab"){ state.screen=t.dataset.view; window.scrollTo(0,0);
     if(state.screen==="settings"){ state.nameSaved=false; render(); }
-    else if(state.screen==="ranking"&&DB.ready()){ loadRanking(); }
+    else if(state.screen==="ranking"&&DB.ready()){ if(state.members==null)loadMembers(); loadRanking(); }
     else if(state.screen==="ff"&&DB.ready()){ loadFFMine(); if(state.ffTab==="search"&&state.ffResults===null){ loadFFSearch(); } }
     else { render(); } return; }
   if(a==="metric"){ state.metric=t.dataset.metric; render(); return; }
@@ -754,10 +785,12 @@ app.addEventListener("click",function(e){
   if(a==="startapp"){ var obn=document.getElementById("obname"); var nm=(obn?obn.value:"").trim();
     if(!nm){ alert("名前を入れてね。"); return; }
     state.playerName=nm; try{localStorage.setItem("archery_pname",nm);}catch(x){}
+    registerMember();
     state.screen="home"; publishMonth(state.rankMonth,function(){ render(); }); return; }
   if(a==="savename"){ var sni=document.getElementById("setname_input"); var nm2=(sni?sni.value:"").trim();
     if(!nm2){ alert("名前を入れてね。"); return; }
     state.playerName=nm2; try{localStorage.setItem("archery_pname",nm2);}catch(x){}
+    registerMember();
     state.nameSaved=true; publishMonth(state.rankMonth,function(){ render(); }); return; }
 
   if(a==="pickdist"){ var d=+t.dataset.dist,idx=state.pickForRound;
@@ -797,9 +830,9 @@ app.addEventListener("click",function(e){
   if(a==="rankdist"){ state.rankDistance=+t.dataset.dist; loadRanking(); return; }
   if(a==="rankrefresh"){ loadRanking(); return; }
   if(a==="fftab"){ state.ffTab=t.dataset.fftab; state.ffPerson=null; if(state.ffTab==="search"&&state.ffResults===null){ loadFFSearch(); } else { render(); } return; }
-  if(a==="ffprev"){ state.ffWeek=addDaysStr(state.ffWeek,-7); state.ffSaved=false; prefillFFWeek(); render(); return; }
-  if(a==="ffnext"){ state.ffWeek=addDaysStr(state.ffWeek,7); state.ffSaved=false; prefillFFWeek(); render(); return; }
-  if(a==="ffopen"){ state.ffWeek=t.dataset.week; state.ffSaved=false; state.ffTab="mine"; prefillFFWeek(); window.scrollTo(0,0); render(); return; }
+  if(a==="ffprev"){ state.ffWeek=addDaysStr(state.ffWeek,-7); state.ffSaved=false; prefillFFWeek(); loadFFEntrants(state.ffWeek); render(); return; }
+  if(a==="ffnext"){ state.ffWeek=addDaysStr(state.ffWeek,7); state.ffSaved=false; prefillFFWeek(); loadFFEntrants(state.ffWeek); render(); return; }
+  if(a==="ffopen"){ state.ffWeek=t.dataset.week; state.ffSaved=false; state.ffTab="mine"; prefillFFWeek(); loadFFEntrants(state.ffWeek); window.scrollTo(0,0); render(); return; }
   if(a==="ffsearchbtn"){ var qi=document.querySelector('[data-action=ffquery]'); if(qi) state.ffQuery=qi.value; loadFFSearch(); return; }
   if(a==="ffperson"){ var ppid=t.dataset.pid; state.ffPerson={pid:ppid,name:t.dataset.name}; state.ffPersonRows=null; state.ffPersonReactions=null; state.ffPersonErr=""; state.ffPersonLoading=true; window.scrollTo(0,0); render();
     DB.ffMine(ppid).then(function(data){ state.ffPersonLoading=false; state.ffPersonRows=data||[]; render(); })
@@ -807,7 +840,7 @@ app.addEventListener("click",function(e){
     DB.ffReactions(ppid).then(function(rx){ state.ffPersonReactions=groupReactions(rx); render(); }).catch(function(){}); return; }
   if(a==="ffpersonback"){ state.ffPerson=null; render(); return; }
   if(a==="ffcat"){ var cc=t.dataset.cat; state.ffCategory=(state.ffCategory===cc?"":cc); render(); return; }
-  if(a==="ffthisweek"){ state.ffWeek=mondayOf(); state.ffSaved=false; state.ffTab="mine"; prefillFFWeek(); window.scrollTo(0,0); render(); return; }
+  if(a==="ffthisweek"){ state.ffWeek=mondayOf(); state.ffSaved=false; state.ffTab="mine"; prefillFFWeek(); loadFFEntrants(state.ffWeek); window.scrollTo(0,0); render(); return; }
   if(a==="ffcopylast"){ var lw=addDaysStr(state.ffWeek,-7); var prev=(state.ffMine||[]).filter(function(x){return x.week===lw;})[0];
     if(prev&&prev.goal){ state.ffGoal=prev.goal; render(); } else { alert("先週の目標が見つかりませんでした。"); } return; }
   if(a==="ffstamp"){ if(!state.playerName){ alert("先に名前を登録してね。"); return; }
@@ -833,6 +866,7 @@ app.addEventListener("click",function(e){
   }
 });
 
+registerMember();
 render();
 </script>
 </body>

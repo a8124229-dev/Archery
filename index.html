@@ -178,7 +178,7 @@ function colorOf(s){
   if(s==="2"||s==="1")return COLORS.white;
   return null;
 }
-var PAD_ROWS=[["X","10","9"],["8","7"],["6","5"],["4","3"],["2","1"],["M"]];
+var PAD_ROWS=[["X","10","9"],["8","7","6"],["5","4","3"],["2","1","M"]];
 var DISTANCES=[18,30,50,70];
 var DIST_COLOR={18:"#2f9fd8",30:"#2fa84f",50:"#e5852d",70:"#c22a22"};
 var FF_BG=["#fff2f5","#eef6ff","#eefaf0","#fff6e8","#f4f0ff","#eafaf7"];
@@ -193,6 +193,7 @@ function todayStr(){ var d=new Date(),p=function(n){return String(n).padStart(2,
 function emptyRound(dist){ var e=function(){return [null,null,null,null,null,null];}; return {distance:dist,ends:[e(),e(),e(),e(),e(),e()]}; }
 function clone(o){ return JSON.parse(JSON.stringify(o)); }
 function roundStats(round){
+  if(round.manual){ var mt=Number(round.total)||0; return {total:mt,shot:(mt>0?36:0),x:0,tens:0,endTotals:[],cumulative:[]}; }
   var total=0,shot=0,x=0,tens=0,endTotals=[],cumulative=[];
   round.ends.forEach(function(end){ var et=0;
     end.forEach(function(a){ if(a!=null){ shot++; et+=val(a); if(a==="X")x++; if(a==="X"||a==="10")tens++; } });
@@ -486,23 +487,63 @@ function homeView(){
     +chartSVG(rows,state.metric)+'<div class="cnote">'+(state.metric==="total"?"距離ごとに色分け。1ラウンド(360点満点)の合計。":"距離ごとに色分け。1射あたりの平均(10点満点)。")+'</div></div>';
   state.history.slice().sort(function(a,b){return a.date<b.date?1:-1;}).forEach(function(s){
     var used=usedRounds(s),gt=0,xs=0; used.forEach(function(r){ var st=roundStats(r); gt+=st.total; xs+=st.x; });
-    var isMatch=s.kind==="試合";
+    var isMatch=s.kind==="試合", isPhoto=s.type==="photo";
     h+='<div class="hcard"><div class="head"><div class="date">'+jpDate(s.date)
       +(isMatch?' <span class="kindtag match">試合</span>':' <span class="kindtag">練習</span>')
+      +(isPhoto?' <span class="kindtag" style="color:#1c6a94;background:#e7f4fb">📷写真</span>':'')
       +'</div><div class="tot">'+gt+'<small> / '+(used.length*360)+'</small></div></div><div class="meta">';
     used.forEach(function(r,i){ h+='<span>R'+(i+1)+' <b>'+r.distance+'m</b> '+roundStats(r).total+'点</span>'; });
-    h+='<span class="x">X '+xs+'</span></div>';
+    if(!isPhoto){ h+='<span class="x">X '+xs+'</span>'; }
+    h+='</div>';
     if(s.note){ h+='<div style="font-size:13px;color:#555;margin-top:6px;white-space:pre-wrap">📝 '+escapeHtml(s.note)+'</div>'; }
     if(s.photo){ h+='<div style="margin-top:8px"><img class="recphoto" data-photo-load="'+s.id+'" data-action="viewphoto" data-id="'+s.id+'" alt="試合の写真"><span style="font-size:12px;color:#8a8a90;margin-left:8px">📷 試合の写真（タップで拡大）</span></div>'; }
     h+='<div class="acts">'
       +'<button class="btn-ghost" style="flex:1;padding:10px" data-action="open" data-id="'+s.id+'">開く</button>'
-      +'<button class="btn-ghost" style="flex:1;padding:10px" data-action="shot" data-id="'+s.id+'">📷 画像</button>'
+      +(isPhoto?'':'<button class="btn-ghost" style="flex:1;padding:10px" data-action="shot" data-id="'+s.id+'">📷 画像</button>')
       +'<button class="btn-ghost" style="color:#c22a22;border-color:#e5b6b2;padding:10px" data-action="delete" data-id="'+s.id+'">削除</button></div></div>';
   });
   return h+'</div>';
 }
 
 /* ---------- 画面：距離選択 ---------- */
+function chooseView(){
+  var h='<div class="flowhead"><button class="ibtn" data-action="cancelchoose">✕</button><div style="font-weight:700">記録の方法</div><span style="width:40px"></span></div>';
+  h+='<div style="padding:26px 16px">';
+  h+='<button class="btn-dark" data-action="choosetype" data-mode="manual" style="width:100%;padding:20px;font-size:17px;margin-bottom:14px">✍️ 手入力で記録'
+    +'<div style="font-size:12px;font-weight:400;opacity:.8;margin-top:4px">1射ずつ入力（練習向き）</div></button>';
+  h+='<button class="btn-dark" data-action="choosetype" data-mode="photo" style="width:100%;padding:20px;font-size:17px;background:#1c6a94">📷 写真で記録'
+    +'<div style="font-size:12px;font-weight:400;opacity:.85;margin-top:4px">合計点を入れて、手書きスコアの写真を1枚（試合向き）</div></button>';
+  return h+'</div>';
+}
+function photoFormView(){
+  var s=state.session, kind=s.kind||"練習";
+  var h='<div class="flowhead"><button class="ibtn" data-action="cancelchoose">✕</button><div style="font-weight:700">写真で記録</div><span style="width:40px"></span></div>';
+  h+='<div style="padding:14px 14px 0">';
+  h+='<div class="card" style="margin-bottom:12px">'
+    +'<div class="row"><span class="lbl" style="min-width:44px">日付</span><input type="date" value="'+s.date+'" data-action="setdate" style="flex:1"></div>'
+    +'<div class="row" style="margin-top:10px"><span class="lbl" style="min-width:44px">種別</span><div class="seg" style="flex:1">'
+      +'<button class="'+(kind==="練習"?"on":"")+'" data-action="setkind" data-kind="練習" style="flex:1;padding:8px">練習</button>'
+      +'<button class="'+(kind==="試合"?"on":"")+'" data-action="setkind" data-kind="試合" style="flex:1;padding:8px">試合</button></div></div>'
+    +'<div class="row" style="margin-top:10px"><span class="lbl" style="min-width:44px">回数</span><div class="seg" style="flex:1">'
+      +'<button class="'+(s.rounds.length===1?"on":"")+'" data-action="pfcount" data-n="1" style="flex:1;padding:8px">1ラウンド</button>'
+      +'<button class="'+(s.rounds.length===2?"on":"")+'" data-action="pfcount" data-n="2" style="flex:1;padding:8px">2ラウンド</button></div></div>'
+    +'</div>';
+  s.rounds.forEach(function(r,i){
+    h+='<div class="card" style="margin-bottom:12px"><div style="font-weight:800;margin-bottom:8px">ラウンド'+(i+1)+'</div>';
+    h+='<div class="lbl">距離</div><div class="dists" style="padding:6px 0 10px">';
+    DISTANCES.forEach(function(d){ h+='<button class="dist '+(r.distance===d?"on":"")+'" data-action="pfdist" data-r="'+i+'" data-dist="'+d+'">'+d+'m</button>'; });
+    h+='</div><div class="lbl">合計点（0〜360）</div>'
+      +'<input type="number" inputmode="numeric" min="0" max="360" value="'+(r.total?r.total:"")+'" data-action="pftotal" data-r="'+i+'" placeholder="例：295" style="width:100%;margin-top:6px">';
+    h+='</div>';
+  });
+  h+='<div class="card" style="margin-bottom:12px"><div class="lbl">手書きスコアの写真（1枚・この端末だけに保存）</div>'
+    +(s.photo
+      ? '<img class="photobox" data-photo-load="'+s.id+'" data-action="viewphoto" data-id="'+s.id+'" alt=""><button class="btn-ghost" data-action="delphoto" style="width:100%;color:#c22a22;border-color:#e5b6b2">写真を削除</button>'
+      : '<label class="btn-ghost" style="display:block;text-align:center;cursor:pointer">📷 写真を選ぶ<input type="file" accept="image/*" data-action="addphoto" style="display:none"></label><div class="cnote">サーバーには上がりません。自分の端末だけに保存されます。</div>')
+    +'</div>';
+  h+='<div style="padding:0 0 28px"><button class="btn-dark" data-action="pfsave" style="width:100%;padding:14px">保存する</button></div>';
+  return h+'</div>';
+}
 function pickDistView(){
   var idx=state.pickForRound;
   var def = (state.session.rounds[idx] ? state.session.rounds[idx].distance : (state.session.rounds[0]?state.session.rounds[0].distance:18));
@@ -520,6 +561,11 @@ function inputView(){
   var h='<div class="flowhead"><button class="ibtn" data-action="cancelinput">✕</button>'
     +'<button class="idist" data-action="redist">ラウンド'+(state.activeRound+1)+' ・ '+round.distance+'m ▾</button>'
     +'<button class="ibtn" data-action="finishexit">終了</button></div>';
+  if(s.rounds.length>=2){
+    h+='<div class="seg" style="margin:10px 12px 0">';
+    s.rounds.forEach(function(r,i){ h+='<button class="'+(state.activeRound===i?"on":"")+'" data-action="gotoround" data-r="'+i+'" style="flex:1;padding:9px">ラウンド'+(i+1)+'（'+r.distance+'m）</button>'; });
+    h+='</div>';
+  }
   h+='<div class="wrap">'+scorecardHTML(round,stats,state.active)+'</div>';
   h+='<div class="stats">'
     +'<div class="stat"><div class="k">合計</div><div class="v">'+stats.total+'<small> /360</small></div></div>'
@@ -882,7 +928,7 @@ function shareCanvas(c){
 /* ---------- 全体描画 ---------- */
 function topHeader(title){
   return '<div class="top"><div class="brand"><span class="dot">◎</span> '+title
-    +' <span style="font-size:11px;color:#9a9aa0;font-weight:400">v15</span></div></div>';
+    +' <span style="font-size:11px;color:#9a9aa0;font-weight:400">v17</span></div></div>';
 }
 function bottomNav(active){
   var items=[["home","記録","🎯"],["ranking","ランキング","🏆"],["ff","週目標","✍️"],["todo","未入力","📋"],["settings","設定","⚙️"]];
@@ -901,6 +947,8 @@ function render(){
   else if(state.screen==="ff"){ h=topHeader("週目標")+ffView()+bottomNav("ff"); }
   else if(state.screen==="todo"){ h=topHeader("未入力")+todoView()+bottomNav("todo"); }
   else if(state.screen==="pickdist"){ h=pickDistView(); }
+  else if(state.screen==="choose"){ h=chooseView(); }
+  else if(state.screen==="photoform"){ h=photoFormView(); }
   else if(state.screen==="input"){ h=inputView(); if(state.sheet)h+=sheetView(); }
   if(state.photoView){ h+=photoOverlay(); }
   document.getElementById("app").innerHTML=h;
@@ -910,7 +958,9 @@ function render(){
 function rerender(){ persistFlow(); render(); }
 
 /* ---------- フロー操作 ---------- */
-function startAdd(){ state.session={id:String(Date.now()),date:todayStr(),roundCount:1,rounds:[],kind:"練習",note:""}; state.creating=true; state.pickForRound=0; state.activeRound=0; state.active={end:0,arrow:0}; state.sheet=null; state.screen="pickdist"; window.scrollTo(0,0); rerender(); }
+function startAdd(){ state.session=null; state.creating=false; state.screen="choose"; window.scrollTo(0,0); rerender(); }
+function startManual(){ state.session={id:String(Date.now()),date:todayStr(),roundCount:1,rounds:[],kind:"練習",note:""}; state.creating=true; state.pickForRound=0; state.activeRound=0; state.active={end:0,arrow:0}; state.sheet=null; state.screen="pickdist"; window.scrollTo(0,0); rerender(); }
+function startPhoto(){ state.session={id:String(Date.now()),date:todayStr(),kind:"練習",note:"",type:"photo",photo:false,rounds:[{distance:18,manual:true,total:0}]}; state.creating=true; state.screen="photoform"; window.scrollTo(0,0); rerender(); }
 function finishRecord(){
   var s=state.session; if(!s){ state.screen="home"; rerender(); return; }
   var shot=0; s.rounds.forEach(function(r){ shot+=roundStats(r).shot; });
@@ -939,6 +989,7 @@ app.addEventListener("change",function(e){ var t=e.target; if(!t.dataset)return;
   else if(a==="ffgoal"){ state.ffGoal=t.value; }
   else if(a==="ffreflect"){ state.ffReflection=t.value; }
   else if(a==="ffquery"){ state.ffQuery=t.value; }
+  else if(a==="pftotal"){ if(state.session&&state.session.rounds[+t.dataset.r]){ state.session.rounds[+t.dataset.r].total=Math.max(0,Math.min(360,Math.round(+t.value||0))); } }
   else if(a==="addphoto"){ var f=t.files&&t.files[0]; if(!f||!state.session)return;
     resizeImage(f,1400,0.6).then(function(dataURL){ return IDB.put("rec:"+state.session.id,dataURL); })
       .then(function(){ state.session.photo=true; rerender(); })
@@ -1004,6 +1055,7 @@ app.addEventListener("click",function(e){
     window.scrollTo(0,0); rerender(); return; }
 
   if(a==="redist"){ state.pickForRound=state.activeRound; state.screen="pickdist"; window.scrollTo(0,0); rerender(); return; }
+  if(a==="gotoround"){ var ri=+t.dataset.r; if(state.session&&state.session.rounds[ri]){ state.activeRound=ri; state.active=firstEmpty(state.session.rounds[ri]); state.sheet=null; window.scrollTo(0,0); rerender(); } return; }
   if(a==="cancelinput"){ var sh=0; state.session.rounds.forEach(function(r){ sh+=roundStats(r).shot; });
     if(sh>0 && !confirm("入力中の記録を破棄して戻りますか？（保存されません）"))return;
     state.session=null; state.sheet=null; state.creating=false; state.screen="home"; window.scrollTo(0,0); rerender(); return; }
@@ -1025,8 +1077,28 @@ app.addEventListener("click",function(e){
   if(a==="sheetfinish"){ finishRecord(); return; }
   if(a==="sheetclose"){ state.sheet=null; rerender(); return; }
 
+  if(a==="choosetype"){ if(t.dataset.mode==="photo"){ startPhoto(); } else { startManual(); } return; }
+  if(a==="cancelchoose"){ state.session=null; state.creating=false; state.screen="home"; window.scrollTo(0,0); render(); return; }
+  if(a==="pfcount"){ if(!state.session)return; var n=+t.dataset.n, rs=state.session.rounds;
+    if(n===1){ state.session.rounds=[rs[0]]; } else if(rs.length<2){ rs.push({distance:18,manual:true,total:0}); }
+    rerender(); return; }
+  if(a==="pfdist"){ if(state.session){ state.session.rounds[+t.dataset.r].distance=+t.dataset.dist; rerender(); } return; }
+  if(a==="pfsave"){ var ps=state.session; if(!ps){ state.screen="home"; render(); return; }
+    document.querySelectorAll('[data-action=pftotal]').forEach(function(inp){ var ri=+inp.dataset.r; if(ps.rounds[ri])ps.rounds[ri].total=Math.max(0,Math.min(360,Math.round(+inp.value||0))); });
+    var any=ps.rounds.some(function(r){return (r.total||0)>0;});
+    if(!any && !ps.photo){ alert("合計点か写真のどちらかは入れてね。"); return; }
+    var prevPB=allTimeBests(), pbHit=null;
+    usedRounds(ps).forEach(function(r){ var st=roundStats(r); if(st.shot!==36)return; if(prevPB[r.distance]==null||st.total>prevPB[r.distance]){ if(!pbHit||st.total>pbHit.score)pbHit={distance:r.distance,score:st.total}; } });
+    ps.roundCount=ps.rounds.length; var pid=ps.id;
+    state.history=[clone(ps)].concat(state.history.filter(function(h){return h.id!==pid;}));
+    saveHistory();
+    state.pbMsg = pbHit ? ("自己ベスト更新！ "+pbHit.distance+"m "+pbHit.score+"点") : "";
+    var pm=(ps.date||"").slice(0,7); if(DB.ready()&&state.playerName){ publishMonth(pm,function(){}); }
+    state.session=null; state.creating=false; state.screen="home"; window.scrollTo(0,0); rerender(); return; }
   if(a==="open"){ var f=state.history.filter(function(h){return h.id===t.dataset.id;})[0];
-    if(f){ state.session=clone(f); state.creating=false; state.activeRound=0; state.active=firstEmpty(state.session.rounds[0]); state.sheet=null; state.screen="input"; window.scrollTo(0,0); rerender(); } return; }
+    if(f){ state.session=clone(f); state.creating=false;
+      if(f.type==="photo"){ state.screen="photoform"; window.scrollTo(0,0); rerender(); return; }
+      state.activeRound=0; state.active=firstEmpty(state.session.rounds[0]); state.sheet=null; state.screen="input"; window.scrollTo(0,0); rerender(); } return; }
   if(a==="delete"){ if(confirm("この記録を削除します。よろしいですか？")){ IDB.del("rec:"+t.dataset.id).catch(function(){}); state.history=state.history.filter(function(h){return h.id!==t.dataset.id;}); saveHistory(); render(); } return; }
 
   if(a==="rankdist"){ state.rankDistance=+t.dataset.dist; loadRanking(); return; }

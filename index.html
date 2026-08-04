@@ -491,6 +491,7 @@ function homeView(){
     h+='<div class="hcard"><div class="head"><div class="date">'+jpDate(s.date)
       +(isMatch?' <span class="kindtag match">試合</span>':' <span class="kindtag">練習</span>')
       +(isPhoto?' <span class="kindtag" style="color:#1c6a94;background:#e7f4fb">📷写真</span>':'')
+      +(s.matchName?(' <span style="font-size:13px;color:#555;font-weight:600">'+escapeHtml(s.matchName)+'</span>'):'')
       +'</div><div class="tot">'+gt+'<small> / '+(used.length*360)+'</small></div></div><div class="meta">';
     used.forEach(function(r,i){ h+='<span>R'+(i+1)+' <b>'+r.distance+'m</b> '+roundStats(r).total+'点</span>'; });
     if(!isPhoto){ h+='<span class="x">X '+xs+'</span>'; }
@@ -516,19 +517,15 @@ function chooseView(){
   return h+'</div>';
 }
 function photoFormView(){
-  var s=state.session, kind=s.kind||"練習";
-  var h='<div class="flowhead"><button class="ibtn" data-action="cancelchoose">✕</button><div style="font-weight:700">写真で記録</div><span style="width:40px"></span></div>';
+  var s=state.session;
+  var total72=(Number(s.rounds[0]&&s.rounds[0].total)||0)+(Number(s.rounds[1]&&s.rounds[1].total)||0);
+  var h='<div class="flowhead"><button class="ibtn" data-action="cancelchoose">✕</button><div style="font-weight:700">写真で記録（試合）</div><span style="width:40px"></span></div>';
   h+='<div style="padding:14px 14px 0">';
   h+='<div class="card" style="margin-bottom:12px">'
-    +'<div class="row"><span class="lbl" style="min-width:44px">日付</span><input type="date" value="'+s.date+'" data-action="setdate" style="flex:1"></div>'
-    +'<div class="row" style="margin-top:10px"><span class="lbl" style="min-width:44px">種別</span><div class="seg" style="flex:1">'
-      +'<button class="'+(kind==="練習"?"on":"")+'" data-action="setkind" data-kind="練習" style="flex:1;padding:8px">練習</button>'
-      +'<button class="'+(kind==="試合"?"on":"")+'" data-action="setkind" data-kind="試合" style="flex:1;padding:8px">試合</button></div></div>'
-    +'<div class="row" style="margin-top:10px"><span class="lbl" style="min-width:44px">回数</span><div class="seg" style="flex:1">'
-      +'<button class="'+(s.rounds.length===1?"on":"")+'" data-action="pfcount" data-n="1" style="flex:1;padding:8px">1ラウンド</button>'
-      +'<button class="'+(s.rounds.length===2?"on":"")+'" data-action="pfcount" data-n="2" style="flex:1;padding:8px">2ラウンド</button></div></div>'
+    +'<div class="row"><span class="lbl" style="min-width:56px">日付</span><input type="date" value="'+s.date+'" data-action="setdate" style="flex:1"></div>'
+    +'<div class="row" style="margin-top:10px"><span class="lbl" style="min-width:56px">試合名</span><input type="text" maxlength="30" value="'+escapeHtml(s.matchName||"")+'" data-action="setmatch" placeholder="任意（例：関東個人）" style="flex:1"></div>'
     +'</div>';
-  s.rounds.forEach(function(r,i){
+  [0,1].forEach(function(i){ var r=s.rounds[i];
     h+='<div class="card" style="margin-bottom:12px"><div style="font-weight:800;margin-bottom:8px">ラウンド'+(i+1)+'</div>';
     h+='<div class="lbl">距離</div><div class="dists" style="padding:6px 0 10px">';
     DISTANCES.forEach(function(d){ h+='<button class="dist '+(r.distance===d?"on":"")+'" data-action="pfdist" data-r="'+i+'" data-dist="'+d+'">'+d+'m</button>'; });
@@ -536,6 +533,9 @@ function photoFormView(){
       +'<input type="number" inputmode="numeric" min="0" max="360" value="'+(r.total?r.total:"")+'" data-action="pftotal" data-r="'+i+'" placeholder="例：295" style="width:100%;margin-top:6px">';
     h+='</div>';
   });
+  h+='<div class="card" style="margin-bottom:12px;text-align:center;background:#fff7dc;border:1px solid #f0d98a">'
+    +'<div style="font-size:13px;color:#8a6d1a;font-weight:700">2ラウンド合計（72射）</div>'
+    +'<div style="font-size:30px;font-weight:800">'+total72+'<span style="font-size:15px;color:#8a8a90"> / 720</span></div></div>';
   h+='<div class="card" style="margin-bottom:12px"><div class="lbl">手書きスコアの写真（1枚・この端末だけに保存）</div>'
     +(s.photo
       ? '<img class="photobox" data-photo-load="'+s.id+'" data-action="viewphoto" data-id="'+s.id+'" alt=""><button class="btn-ghost" data-action="delphoto" style="width:100%;color:#c22a22;border-color:#e5b6b2">写真を削除</button>'
@@ -546,7 +546,7 @@ function photoFormView(){
 }
 function pickDistView(){
   var idx=state.pickForRound;
-  var def = (state.session.rounds[idx] ? state.session.rounds[idx].distance : (state.session.rounds[0]?state.session.rounds[0].distance:18));
+  var def = (state.session.rounds[idx] ? state.session.rounds[idx].distance : null);
   var h='<div class="flowhead"><button class="ibtn" data-action="pickback">←</button><div class="flowtitle">ラウンド'+(idx+1)+'の距離</div><div style="min-width:44px"></div></div>';
   h+='<div style="padding:20px 16px 0">';
   if(idx===0){ h+='<div class="row" style="padding-bottom:16px"><span class="lbl" style="min-width:34px">日付</span><input type="date" data-action="setdate" value="'+state.session.date+'" style="flex:1"></div>'; }
@@ -928,7 +928,7 @@ function shareCanvas(c){
 /* ---------- 全体描画 ---------- */
 function topHeader(title){
   return '<div class="top"><div class="brand"><span class="dot">◎</span> '+title
-    +' <span style="font-size:11px;color:#9a9aa0;font-weight:400">v17</span></div></div>';
+    +' <span style="font-size:11px;color:#9a9aa0;font-weight:400">v18</span></div></div>';
 }
 function bottomNav(active){
   var items=[["home","記録","🎯"],["ranking","ランキング","🏆"],["ff","週目標","✍️"],["todo","未入力","📋"],["settings","設定","⚙️"]];
@@ -960,7 +960,7 @@ function rerender(){ persistFlow(); render(); }
 /* ---------- フロー操作 ---------- */
 function startAdd(){ state.session=null; state.creating=false; state.screen="choose"; window.scrollTo(0,0); rerender(); }
 function startManual(){ state.session={id:String(Date.now()),date:todayStr(),roundCount:1,rounds:[],kind:"練習",note:""}; state.creating=true; state.pickForRound=0; state.activeRound=0; state.active={end:0,arrow:0}; state.sheet=null; state.screen="pickdist"; window.scrollTo(0,0); rerender(); }
-function startPhoto(){ state.session={id:String(Date.now()),date:todayStr(),kind:"練習",note:"",type:"photo",photo:false,rounds:[{distance:18,manual:true,total:0}]}; state.creating=true; state.screen="photoform"; window.scrollTo(0,0); rerender(); }
+function startPhoto(){ state.session={id:String(Date.now()),date:todayStr(),kind:"試合",note:"",type:"photo",photo:false,matchName:"",rounds:[{distance:18,manual:true,total:0},{distance:18,manual:true,total:0}]}; state.creating=true; state.screen="photoform"; window.scrollTo(0,0); rerender(); }
 function finishRecord(){
   var s=state.session; if(!s){ state.screen="home"; rerender(); return; }
   var shot=0; s.rounds.forEach(function(r){ shot+=roundStats(r).shot; });
@@ -989,7 +989,8 @@ app.addEventListener("change",function(e){ var t=e.target; if(!t.dataset)return;
   else if(a==="ffgoal"){ state.ffGoal=t.value; }
   else if(a==="ffreflect"){ state.ffReflection=t.value; }
   else if(a==="ffquery"){ state.ffQuery=t.value; }
-  else if(a==="pftotal"){ if(state.session&&state.session.rounds[+t.dataset.r]){ state.session.rounds[+t.dataset.r].total=Math.max(0,Math.min(360,Math.round(+t.value||0))); } }
+  else if(a==="pftotal"){ if(state.session&&state.session.rounds[+t.dataset.r]){ state.session.rounds[+t.dataset.r].total=Math.max(0,Math.min(360,Math.round(+t.value||0))); rerender(); } }
+  else if(a==="setmatch"){ if(state.session){ state.session.matchName=t.value; } }
   else if(a==="addphoto"){ var f=t.files&&t.files[0]; if(!f||!state.session)return;
     resizeImage(f,1400,0.6).then(function(dataURL){ return IDB.put("rec:"+state.session.id,dataURL); })
       .then(function(){ state.session.photo=true; rerender(); })
@@ -1086,6 +1087,7 @@ app.addEventListener("click",function(e){
   if(a==="pfsave"){ var ps=state.session; if(!ps){ state.screen="home"; render(); return; }
     document.querySelectorAll('[data-action=pftotal]').forEach(function(inp){ var ri=+inp.dataset.r; if(ps.rounds[ri])ps.rounds[ri].total=Math.max(0,Math.min(360,Math.round(+inp.value||0))); });
     var any=ps.rounds.some(function(r){return (r.total||0)>0;});
+    if(ps.rounds.some(function(r){ return (r.total||0)>0 && !r.distance; })){ alert("点数を入れたラウンドは距離も選んでね。"); return; }
     if(!any && !ps.photo){ alert("合計点か写真のどちらかは入れてね。"); return; }
     var prevPB=allTimeBests(), pbHit=null;
     usedRounds(ps).forEach(function(r){ var st=roundStats(r); if(st.shot!==36)return; if(prevPB[r.distance]==null||st.total>prevPB[r.distance]){ if(!pbHit||st.total>pbHit.score)pbHit={distance:r.distance,score:st.total}; } });

@@ -149,6 +149,11 @@
   .rxbtn.mine { background:#fff3cf; border-color:#eecf6a; }
   .rxcomment { font-size:13px; color:#333; margin-top:6px; line-height:1.6; }
   .rxcomment b { color:#1c6a94; }
+  .povl { position:fixed; inset:0; background:rgba(0,0,0,.9); z-index:50; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:20px; }
+  .povl-img { max-width:100%; max-height:82vh; border-radius:8px; }
+  .povl-x { color:#fff; margin-top:14px; font-size:15px; }
+  .recphoto { width:60px; height:60px; object-fit:cover; border-radius:8px; border:1px solid #d3d0c8; background:#eee; }
+  .photobox { width:100%; max-height:220px; object-fit:contain; border-radius:10px; border:1px solid #d3d0c8; background:#f4f2ec; margin:6px 0 4px; }
 </style>
 </head>
 <body>
@@ -312,6 +317,10 @@ var DB = {
   delMember:function(pid){
     var url=SUPABASE_URL+"/rest/v1/members?player_id=eq."+encodeURIComponent(pid);
     return fetch(url,{method:"DELETE",headers:this._h()}).then(function(r){ if(!r.ok)return r.text().then(function(t){ throw new Error(t||("HTTP "+r.status)); }); return true; });
+  },
+  scoreMonth:function(month){
+    var url=SUPABASE_URL+"/rest/v1/highscores?select=player_id&month=eq."+encodeURIComponent(month)+"&limit=1000";
+    return fetch(url,{headers:this._h(),cache:"no-store"}).then(function(r){ if(!r.ok)return r.text().then(function(t){ throw new Error(t||("HTTP "+r.status)); }); return r.json(); });
   }
 };
 
@@ -327,7 +336,9 @@ var state = {
   nameSaved:false, ffPerson:null, ffPersonRows:null, ffPersonLoading:false, ffPersonErr:"",
   rankArrows:36, pbMsg:"", ffCategory:"", ffPersonReactions:null, ffMineReactions:null,
   importText:"", members:null, ffEntrants:null,
-  pendingName:"", nameMatches:null, mergeBusy:false, onbLink:false
+  pendingName:"", nameMatches:null, mergeBusy:false, onbLink:false,
+  todoLoading:false, todoScorePids:null, todoGoalPids:null, todoMonth: todayStr().slice(0,7), todoWeek: mondayOf(),
+  photoView:null
 };
 (function(){ var f=load("archery_flow_v2");
   if(f && f.session && (f.screen==="input"||f.screen==="pickdist")){
@@ -482,8 +493,10 @@ function homeView(){
     used.forEach(function(r,i){ h+='<span>R'+(i+1)+' <b>'+r.distance+'m</b> '+roundStats(r).total+'点</span>'; });
     h+='<span class="x">X '+xs+'</span></div>';
     if(s.note){ h+='<div style="font-size:13px;color:#555;margin-top:6px;white-space:pre-wrap">📝 '+escapeHtml(s.note)+'</div>'; }
+    if(s.photo){ h+='<div style="margin-top:8px"><img class="recphoto" data-photo-load="'+s.id+'" data-action="viewphoto" data-id="'+s.id+'" alt="試合の写真"><span style="font-size:12px;color:#8a8a90;margin-left:8px">📷 試合の写真（タップで拡大）</span></div>'; }
     h+='<div class="acts">'
       +'<button class="btn-ghost" style="flex:1;padding:10px" data-action="open" data-id="'+s.id+'">開く</button>'
+      +'<button class="btn-ghost" style="flex:1;padding:10px" data-action="shot" data-id="'+s.id+'">📷 画像</button>'
       +'<button class="btn-ghost" style="color:#c22a22;border-color:#e5b6b2;padding:10px" data-action="delete" data-id="'+s.id+'">削除</button></div></div>';
   });
   return h+'</div>';
@@ -525,6 +538,10 @@ function inputView(){
     +'<button class="'+(kind==="試合"?"on":"")+'" data-action="setkind" data-kind="試合" style="flex:1;padding:8px">試合</button></div></div>'
     +'<div class="lbl">メモ（天気・ポンド・セッティングなど）</div>'
     +'<textarea class="ff-ta" data-action="setnote" maxlength="200" placeholder="例：向かい風強め／40ポンド／プランジャー1目盛り緩めた">'+escapeHtml(s.note||"")+'</textarea>'
+    +'<div class="lbl">試合の写真（手書きスコアなど・この端末だけに保存）</div>'
+    +(s.photo
+      ? '<img class="photobox" data-photo-load="'+s.id+'" data-action="viewphoto" data-id="'+s.id+'" alt="試合の写真"><button class="btn-ghost" data-action="delphoto" style="width:100%;color:#c22a22;border-color:#e5b6b2">写真を削除</button>'
+      : '<label class="btn-ghost" style="display:block;text-align:center;cursor:pointer">📷 写真を追加<input type="file" accept="image/*" data-action="addphoto" style="display:none"></label><div class="cnote">サーバーには上がりません。自分の端末だけに保存されます。</div>')
     +'</div></div>';
   return h;
 }
@@ -570,10 +587,6 @@ function rankingView(){
     });
   }
   h+='</div>';
-  var rent={}; (state.rankRows||[]).forEach(function(rr){rent[rr.player_id]=1;});
-  if(state.members&&state.members.length){ var rmiss=notEnteredNames(rent);
-    h+='<div class="card" style="margin-top:10px"><div style="font-weight:700;font-size:13px;margin-bottom:6px">まだ入力していない人（'+monthLabel(state.rankMonth)+'・'+state.rankDistance+'m・'+state.rankArrows+'射）</div>'
-      +(rmiss.length?('<div style="font-size:14px;color:#555;line-height:1.9">'+rmiss.map(escapeHtml).join('、')+'</div>'):'<div class="cnote" style="color:#2f7a3a;padding:0">全員入力済みです！</div>')+'</div>'; }
   h+='<div class="cnote">記録を保存すると、その月のあなたのハイスコアだけが自動で公開されます。1射ごとの詳細は公開されません。</div></div>';
   return h;
 }
@@ -610,12 +623,6 @@ function ffView(){
   h+='<button class="btn-dark" data-action="ffsave" style="width:100%">この週を保存</button>';
   if(state.ffSaved){ h+='<div class="cnote" style="color:#2f7a3a">保存しました。</div>'; }
   h+='</div>';
-  if(state.members&&state.members.length){
-    var fent=(state.ffEntrants&&state.ffEntrants.week===state.ffWeek)?state.ffEntrants.pids:null;
-    if(fent){ var fmiss=notEnteredNames(fent);
-      h+='<div class="card" style="margin-bottom:10px"><div style="font-weight:700;font-size:13px;margin-bottom:6px">'+ffWeekLabel(state.ffWeek)+'の週 まだ書いていない人</div>'
-        +(fmiss.length?('<div style="font-size:14px;color:#555;line-height:1.9">'+fmiss.map(escapeHtml).join('、')+'</div>'):'<div class="cnote" style="color:#2f7a3a;padding:0">全員記入済みです！</div>')+'</div>'; }
-  }
   h+='<div class="seg" style="margin-bottom:10px">'
     +'<button class="'+(state.ffTab==="mine"?"on":"")+'" data-action="fftab" data-fftab="mine" style="flex:1;padding:8px">自分の記録</button>'
     +'<button class="'+(state.ffTab==="search"?"on":"")+'" data-action="fftab" data-fftab="search" style="flex:1;padding:8px">みんなから探す</button></div>';
@@ -765,13 +772,120 @@ function ffPersonCard(e){
   return h+'</div>';
 }
 
+/* ---------- 未入力ページ ---------- */
+function loadTodo(){
+  if(!DB.ready()){ render(); return; }
+  state.todoMonth=todayStr().slice(0,7); state.todoWeek=mondayOf();
+  state.todoLoading=true; render();
+  if(state.members==null)loadMembers();
+  var p1=DB.scoreMonth(state.todoMonth), p2=DB.ffByWeek(state.todoWeek);
+  Promise.all([p1,p2]).then(function(res){
+    var sp={}; (res[0]||[]).forEach(function(r){ sp[r.player_id]=1; });
+    var gp={}; (res[1]||[]).forEach(function(r){ if((r.goal&&r.goal.trim())||(r.reflection&&r.reflection.trim()))gp[r.player_id]=1; });
+    state.todoScorePids=sp; state.todoGoalPids=gp; state.todoLoading=false; render();
+  }).catch(function(err){ state.todoLoading=false; render(); });
+}
+function todoView(){
+  var h='<div style="padding:12px 12px">';
+  h+='<div style="text-align:center;padding:0 0 10px;font-size:12px;color:#8a8a90">まだ入力していない人の一覧</div>';
+  if(!DB.ready()){ return h+'<div class="card">ネットにつながると表示されます。</div></div>'; }
+  if(state.todoLoading||state.members==null){ return h+'<div class="cnote">読み込み中…</div></div>'; }
+  if(!state.members.length){ return h+'<div class="card">まだ登録メンバーがいません。みんながアプリを開くと表示されます。</div></div>'; }
+  var missScore=(state.members||[]).filter(function(m){ return !(state.todoScorePids||{})[m.player_id]; }).map(function(m){return m.name;});
+  var missGoal =(state.members||[]).filter(function(m){ return !(state.todoGoalPids||{})[m.player_id]; }).map(function(m){return m.name;});
+  h+='<div class="card" style="margin-bottom:12px"><div style="font-weight:800;font-size:15px;margin-bottom:4px">🎯 スコア未入力（'+monthLabel(state.todoMonth)+'）</div>'
+    +'<div class="cnote" style="padding:0 0 8px">今月まだ1回も記録がない人（距離は問いません）</div>'
+    +(missScore.length?('<div style="font-size:15px;color:#333;line-height:2">'+missScore.map(escapeHtml).join('、')+'</div>'):'<div style="color:#2f7a3a;font-weight:700">全員入力済みです！🎉</div>')+'</div>';
+  h+='<div class="card"><div style="font-weight:800;font-size:15px;margin-bottom:4px">✍️ 週目標 未記入（'+ffWeekLabel(state.todoWeek)+'の週）</div>'
+    +'<div class="cnote" style="padding:0 0 8px">今週まだ目標／振り返りを書いていない人</div>'
+    +(missGoal.length?('<div style="font-size:15px;color:#333;line-height:2">'+missGoal.map(escapeHtml).join('、')+'</div>'):'<div style="color:#2f7a3a;font-weight:700">全員記入済みです！🎉</div>')+'</div>';
+  h+='<button class="btn-ghost" data-action="tab" data-view="todo" style="width:100%;margin-top:12px">🔄 最新に更新</button>';
+  return h+'</div>';
+}
+
+/* ---------- 写真（この端末に非公開保存：IndexedDB） ---------- */
+var IDB={db:null,
+  open:function(){ return new Promise(function(res,rej){ if(IDB.db)return res(IDB.db);
+    try{ var r=indexedDB.open("archery_photos",1);
+      r.onupgradeneeded=function(){ if(!r.result.objectStoreNames.contains("photos"))r.result.createObjectStore("photos"); };
+      r.onsuccess=function(){ IDB.db=r.result; res(IDB.db); };
+      r.onerror=function(){ rej(r.error); };
+    }catch(e){ rej(e); } }); },
+  put:function(k,v){ return IDB.open().then(function(db){ return new Promise(function(res,rej){ var tx=db.transaction("photos","readwrite"); tx.objectStore("photos").put(v,k); tx.oncomplete=function(){res(true);}; tx.onerror=function(){rej(tx.error);}; }); }); },
+  get:function(k){ return IDB.open().then(function(db){ return new Promise(function(res,rej){ var tx=db.transaction("photos","readonly"); var rq=tx.objectStore("photos").get(k); rq.onsuccess=function(){res(rq.result||null);}; rq.onerror=function(){rej(rq.error);}; }); }); },
+  del:function(k){ return IDB.open().then(function(db){ return new Promise(function(res,rej){ var tx=db.transaction("photos","readwrite"); tx.objectStore("photos").delete(k); tx.oncomplete=function(){res(true);}; tx.onerror=function(){rej(tx.error);}; }); }); }
+};
+function resizeImage(file,maxDim,quality){ return new Promise(function(res,rej){
+  var url=URL.createObjectURL(file), img=new Image();
+  img.onload=function(){ var w=img.width,h=img.height,s=Math.min(1,maxDim/Math.max(w,h));
+    var cw=Math.round(w*s),ch=Math.round(h*s),c=document.createElement("canvas"); c.width=cw; c.height=ch;
+    c.getContext("2d").drawImage(img,0,0,cw,ch); URL.revokeObjectURL(url); res(c.toDataURL("image/jpeg",quality)); };
+  img.onerror=function(){ URL.revokeObjectURL(url); rej(new Error("画像を読み込めませんでした")); };
+  img.src=url; }); }
+function hydratePhotos(){
+  var imgs=document.querySelectorAll("img[data-photo-load]");
+  imgs.forEach(function(im){ var id=im.getAttribute("data-photo-load"); im.removeAttribute("data-photo-load");
+    IDB.get("rec:"+id).then(function(d){ if(d)im.src=d; }).catch(function(){}); });
+}
+function photoOverlay(){
+  return '<div class="povl" data-action="closephoto"><img class="povl-img" data-photo-load="'+escapeHtml(state.photoView)+'" alt=""><div class="povl-x">閉じる ✕</div></div>';
+}
+
+/* ---------- 記録を画像に ---------- */
+function recordToCanvas(s){
+  var used=usedRounds(s), pad=24, rowH=34, headH=96, per=44+6*rowH+18;
+  var W=680, H=headH+used.length*per+ (s.note?60:0) + pad;
+  var c=document.createElement("canvas"); c.width=W; c.height=H; var g=c.getContext("2d");
+  g.fillStyle="#ffffff"; g.fillRect(0,0,W,H);
+  g.fillStyle="#232323"; g.font="bold 26px -apple-system,sans-serif";
+  g.fillText("アーチェリー スコア", pad, 40);
+  g.font="16px -apple-system,sans-serif"; g.fillStyle="#555";
+  g.fillText(jpDate(s.date)+"  ("+(s.kind||"練習")+")", pad, 70);
+  var gt=0,xs=0; used.forEach(function(r){ var st=roundStats(r); gt+=st.total; xs+=st.x; });
+  g.fillStyle="#232323"; g.font="bold 18px -apple-system,sans-serif";
+  g.fillText("合計 "+gt+" / "+(used.length*360)+"   X:"+xs, pad, 92);
+  var y=headH;
+  used.forEach(function(r,ri){ var st=roundStats(r);
+    g.fillStyle="#1c6a94"; g.font="bold 17px -apple-system,sans-serif";
+    g.fillText("R"+(ri+1)+"  "+r.distance+"m   "+st.total+"点", pad, y+22);
+    var cols=6, cellW=(W-pad*2)/(cols+1), x0=pad, yy=y+40;
+    for(var end=0; end<6; end++){
+      g.fillStyle="#888"; g.font="13px -apple-system,sans-serif";
+      g.fillText((end+1)+"エンド", x0, yy+end*rowH+20);
+      var esum=0;
+      for(var a=0; a<6; a++){ var v=(r.ends[end]&&r.ends[end][a]!=null)?r.ends[end][a]:null;
+        var cx=x0+cellW*(a+1)+6, cy=yy+end*rowH+6;
+        g.strokeStyle="#e0ddd4"; g.strokeRect(cx,cy,cellW-10,rowH-10);
+        g.fillStyle="#232323"; g.font="15px -apple-system,sans-serif";
+        var label=(v==null?"":String(v)); if(v!=null)esum+=val(v);
+        g.fillText(label, cx+ (cellW-10)/2 - 5, cy+20);
+      }
+      g.fillStyle="#1c6a94"; g.font="bold 14px -apple-system,sans-serif";
+      g.fillText("="+esum, x0+cellW*7-4, yy+end*rowH+20);
+    }
+    y+=per;
+  });
+  if(s.note){ g.fillStyle="#555"; g.font="14px -apple-system,sans-serif"; g.fillText("メモ: "+String(s.note).slice(0,40), pad, y+24); }
+  return c;
+}
+function shareCanvas(c){
+  c.toBlob(function(blob){ if(!blob){ alert("画像を作れませんでした。"); return; }
+    var file=new File([blob],"archery-score.png",{type:"image/png"});
+    if(navigator.canShare && navigator.canShare({files:[file]}) && navigator.share){
+      navigator.share({files:[file],title:"アーチェリースコア"}).catch(function(){});
+    } else {
+      var url=URL.createObjectURL(blob); var w=window.open(); if(w){ w.document.write('<img src="'+url+'" style="width:100%">'); } else { alert("画像を保存するには、開いた画像を長押ししてください。"); }
+    }
+  },"image/png");
+}
+
 /* ---------- 全体描画 ---------- */
 function topHeader(title){
   return '<div class="top"><div class="brand"><span class="dot">◎</span> '+title
-    +' <span style="font-size:11px;color:#9a9aa0;font-weight:400">v14</span></div></div>';
+    +' <span style="font-size:11px;color:#9a9aa0;font-weight:400">v15</span></div></div>';
 }
 function bottomNav(active){
-  var items=[["home","記録","🎯"],["ranking","ランキング","🏆"],["ff","週目標","✍️"],["settings","設定","⚙️"]];
+  var items=[["home","記録","🎯"],["ranking","ランキング","🏆"],["ff","週目標","✍️"],["todo","未入力","📋"],["settings","設定","⚙️"]];
   var h='<div class="bnav">';
   items.forEach(function(it){ var on=active===it[0]?" on":"";
     h+='<button class="bnav-item'+on+'" data-action="tab" data-view="'+it[0]+'">'
@@ -785,10 +899,13 @@ function render(){
   else if(state.screen==="home"){ h=topHeader("記録")+homeView()+bottomNav("home"); }
   else if(state.screen==="ranking"){ h=topHeader("ランキング")+rankingView()+bottomNav("ranking"); }
   else if(state.screen==="ff"){ h=topHeader("週目標")+ffView()+bottomNav("ff"); }
+  else if(state.screen==="todo"){ h=topHeader("未入力")+todoView()+bottomNav("todo"); }
   else if(state.screen==="pickdist"){ h=pickDistView(); }
   else if(state.screen==="input"){ h=inputView(); if(state.sheet)h+=sheetView(); }
+  if(state.photoView){ h+=photoOverlay(); }
   document.getElementById("app").innerHTML=h;
   window.scrollTo(0,y);
+  hydratePhotos();
 }
 function rerender(){ persistFlow(); render(); }
 
@@ -822,6 +939,10 @@ app.addEventListener("change",function(e){ var t=e.target; if(!t.dataset)return;
   else if(a==="ffgoal"){ state.ffGoal=t.value; }
   else if(a==="ffreflect"){ state.ffReflection=t.value; }
   else if(a==="ffquery"){ state.ffQuery=t.value; }
+  else if(a==="addphoto"){ var f=t.files&&t.files[0]; if(!f||!state.session)return;
+    resizeImage(f,1400,0.6).then(function(dataURL){ return IDB.put("rec:"+state.session.id,dataURL); })
+      .then(function(){ state.session.photo=true; rerender(); })
+      .catch(function(err){ alert("写真を保存できませんでした：\n"+((err&&err.message)||"")); }); }
   else if(a==="rankmonth"){ state.rankMonth=t.value; loadRanking(); }
 });
 app.addEventListener("click",function(e){
@@ -829,12 +950,17 @@ app.addEventListener("click",function(e){
 
   if(a==="tab"){ state.screen=t.dataset.view; window.scrollTo(0,0);
     if(state.screen==="settings"){ state.nameSaved=false; render(); }
-    else if(state.screen==="ranking"&&DB.ready()){ if(state.members==null)loadMembers(); loadRanking(); }
+    else if(state.screen==="ranking"&&DB.ready()){ loadRanking(); }
     else if(state.screen==="ff"&&DB.ready()){ loadFFMine(); if(state.ffTab==="search"&&state.ffResults===null){ loadFFSearch(); } }
+    else if(state.screen==="todo"&&DB.ready()){ loadTodo(); }
     else { render(); } return; }
   if(a==="metric"){ state.metric=t.dataset.metric; render(); return; }
   if(a==="add"){ startAdd(); return; }
   if(a==="pbdismiss"){ state.pbMsg=""; render(); return; }
+  if(a==="shot"){ var rs=state.history.filter(function(x){return x.id===t.dataset.id;})[0]; if(rs){ try{ shareCanvas(recordToCanvas(rs)); }catch(err){ alert("画像を作れませんでした。"); } } return; }
+  if(a==="viewphoto"){ state.photoView=t.dataset.id; render(); return; }
+  if(a==="closephoto"){ state.photoView=null; render(); return; }
+  if(a==="delphoto"){ if(state.session){ IDB.del("rec:"+state.session.id).catch(function(){}); state.session.photo=false; rerender(); } return; }
   if(a==="setkind"){ if(state.session){ state.session.kind=t.dataset.kind; rerender(); } return; }
   if(a==="rankarrows"){ state.rankArrows=+t.dataset.arrows; loadRanking(); return; }
   if(a==="copyexport"){ var txt=exportJSON();
@@ -901,7 +1027,7 @@ app.addEventListener("click",function(e){
 
   if(a==="open"){ var f=state.history.filter(function(h){return h.id===t.dataset.id;})[0];
     if(f){ state.session=clone(f); state.creating=false; state.activeRound=0; state.active=firstEmpty(state.session.rounds[0]); state.sheet=null; state.screen="input"; window.scrollTo(0,0); rerender(); } return; }
-  if(a==="delete"){ if(confirm("この記録を削除します。よろしいですか？")){ state.history=state.history.filter(function(h){return h.id!==t.dataset.id;}); saveHistory(); render(); } return; }
+  if(a==="delete"){ if(confirm("この記録を削除します。よろしいですか？")){ IDB.del("rec:"+t.dataset.id).catch(function(){}); state.history=state.history.filter(function(h){return h.id!==t.dataset.id;}); saveHistory(); render(); } return; }
 
   if(a==="rankdist"){ state.rankDistance=+t.dataset.dist; loadRanking(); return; }
   if(a==="rankrefresh"){ loadRanking(); return; }

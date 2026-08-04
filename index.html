@@ -217,7 +217,8 @@ function saveHistory(){ try{ localStorage.setItem("archery_history_v1",JSON.stri
 function exportJSON(){ return JSON.stringify({v:1,name:state.playerName,history:state.history}); }
 function persistFlow(){ try{ localStorage.setItem("archery_flow_v2",JSON.stringify({
   screen:state.screen,session:state.session,activeRound:state.activeRound,active:state.active,pickForRound:state.pickForRound,creating:state.creating })); }catch(e){} }
-function getPid(){ var p=localStorage.getItem("archery_pid"); if(!p){ p="p"+Date.now()+Math.random().toString(36).slice(2,7); localStorage.setItem("archery_pid",p);} return p; }
+function genId(){ try{ if(window.crypto&&crypto.randomUUID) return "a-"+crypto.randomUUID(); }catch(e){} return "a-"+Date.now().toString(36)+"-"+Math.random().toString(36).slice(2,10)+Math.random().toString(36).slice(2,10); }
+function getPid(){ var p=localStorage.getItem("archery_pid"); if(!p){ p=genId(); localStorage.setItem("archery_pid",p);} return p; }
 
 /* ---------- 共有DB：SDKを使わず直接通信（DataCloneError回避） ---------- */
 var DB = {
@@ -282,6 +283,35 @@ var DB = {
   ffByWeek:function(week){
     var url=SUPABASE_URL+"/rest/v1/feedforward?select=player_id,name,goal,reflection&week=eq."+encodeURIComponent(week)+"&limit=300";
     return fetch(url,{headers:this._h(),cache:"no-store"}).then(function(r){ if(!r.ok)return r.text().then(function(t){ throw new Error(t||("HTTP "+r.status)); }); return r.json(); });
+  },
+  memberByPid:function(pid){
+    var url=SUPABASE_URL+"/rest/v1/members?select=player_id,name&player_id=eq."+encodeURIComponent(pid);
+    return fetch(url,{headers:this._h(),cache:"no-store"}).then(function(r){ if(!r.ok)return r.text().then(function(t){ throw new Error(t||("HTTP "+r.status)); }); return r.json(); });
+  },
+  ffAllByPid:function(pid){
+    var url=SUPABASE_URL+"/rest/v1/feedforward?select=week,goal,reflection,category&player_id=eq."+encodeURIComponent(pid)+"&order=week.desc&limit=500";
+    return fetch(url,{headers:this._h(),cache:"no-store"}).then(function(r){ if(!r.ok)return r.text().then(function(t){ throw new Error(t||("HTTP "+r.status)); }); return r.json(); });
+  },
+  hsByPid:function(pid){
+    var url=SUPABASE_URL+"/rest/v1/highscores?select=distance,month,score&player_id=eq."+encodeURIComponent(pid)+"&limit=500";
+    return fetch(url,{headers:this._h(),cache:"no-store"}).then(function(r){ if(!r.ok)return r.text().then(function(t){ throw new Error(t||("HTTP "+r.status)); }); return r.json(); });
+  },
+  hs72ByPid:function(pid){
+    var url=SUPABASE_URL+"/rest/v1/highscores72?select=distance,month,score&player_id=eq."+encodeURIComponent(pid)+"&limit=500";
+    return fetch(url,{headers:this._h(),cache:"no-store"}).then(function(r){ if(!r.ok)return r.text().then(function(t){ throw new Error(t||("HTTP "+r.status)); }); return r.json(); });
+  },
+  delByPid:function(table,pid){
+    var url=SUPABASE_URL+"/rest/v1/"+table+"?player_id=eq."+encodeURIComponent(pid);
+    return fetch(url,{method:"DELETE",headers:this._h()}).then(function(r){ if(!r.ok)return r.text().then(function(t){ throw new Error(t||("HTTP "+r.status)); }); return true; });
+  },
+  delReactionsByPid:function(pid){
+    var e=encodeURIComponent(pid);
+    var url=SUPABASE_URL+"/rest/v1/ff_reactions?or=(target_pid.eq."+e+",from_pid.eq."+e+")";
+    return fetch(url,{method:"DELETE",headers:this._h()}).then(function(r){ if(!r.ok)return r.text().then(function(t){ throw new Error(t||("HTTP "+r.status)); }); return true; });
+  },
+  delMember:function(pid){
+    var url=SUPABASE_URL+"/rest/v1/members?player_id=eq."+encodeURIComponent(pid);
+    return fetch(url,{method:"DELETE",headers:this._h()}).then(function(r){ if(!r.ok)return r.text().then(function(t){ throw new Error(t||("HTTP "+r.status)); }); return true; });
   }
 };
 
@@ -296,7 +326,8 @@ var state = {
   ffQuery:"", ffResults:null, ffSearchLoading:false, ffSearchErr:"", ffSearched:false,
   nameSaved:false, ffPerson:null, ffPersonRows:null, ffPersonLoading:false, ffPersonErr:"",
   rankArrows:36, pbMsg:"", ffCategory:"", ffPersonReactions:null, ffMineReactions:null,
-  importText:"", members:null, ffEntrants:null
+  importText:"", members:null, ffEntrants:null,
+  pendingName:"", nameMatches:null, mergeBusy:false, onbLink:false
 };
 (function(){ var f=load("archery_flow_v2");
   if(f && f.session && (f.screen==="input"||f.screen==="pickdist")){
@@ -363,6 +394,25 @@ function loadFFEntrants(week){ if(!DB.ready())return; DB.ffByWeek(week).then(fun
     var pids={}; (d||[]).forEach(function(x){ if((x.goal&&x.goal.trim())||(x.reflection&&x.reflection.trim()))pids[x.player_id]=1; });
     state.ffEntrants={week:week,pids:pids}; render(); }).catch(function(){}); }
 function notEnteredNames(enteredPidSet){ return (state.members||[]).filter(function(m){ return !enteredPidSet[m.player_id]; }).map(function(m){ return m.name; }); }
+function createNewAccount(){
+  var p=genId(); state.playerId=p; try{localStorage.setItem("archery_pid",p);}catch(x){}
+  state.playerName=state.pendingName; try{localStorage.setItem("archery_pname",state.playerName);}catch(x){}
+  state.pendingName=""; state.nameMatches=null; state.screen="home"; state.members=null;
+  registerMember(); publishMonth(state.rankMonth,function(){ render(); });
+}
+function adoptByCode(code){
+  code=(code||"").trim(); if(!code){ alert("引き継ぎコードを入力してね。"); return; }
+  if(!DB.ready()){ alert("通信できません。少し待って試してね。"); return; }
+  DB.memberByPid(code).then(function(list){
+    if(list&&list.length){
+      state.playerId=code; try{localStorage.setItem("archery_pid",code);}catch(x){}
+      state.playerName=list[0].name; try{localStorage.setItem("archery_pname",state.playerName);}catch(x){}
+      state.pendingName=""; state.nameMatches=null; state.screen="home"; state.members=null; state.nameSaved=false;
+      registerMember(); alert("「"+state.playerName+"」として引き継ぎました。");
+      publishMonth(state.rankMonth,function(){ render(); });
+    } else { alert("そのコードのアカウントが見つかりませんでした。コードをもう一度確認してね。"); }
+  }).catch(function(err){ alert("エラー：\n"+((err&&err.message)||"通信エラー")); });
+}
 
 /* ---------- 部品 ---------- */
 function scorecardHTML(round,stats,active){
@@ -648,15 +698,21 @@ function loadFFSearch(){
 /* ---------- 画面：オンボーディング / 設定 ---------- */
 function onboardingView(){
   return '<div class="top"><div class="brand"><span class="dot">◎</span> スコア管理</div></div>'
-    +'<div style="padding:44px 20px 20px;text-align:center">'
+    +'<div style="padding:40px 20px 20px;text-align:center">'
     +'<div style="font-size:46px">🎯</div>'
     +'<div style="font-size:20px;font-weight:800;margin:10px 0 4px">アーチェリー スコア管理</div>'
     +'<div style="color:#8a8a90;font-size:13px;line-height:1.7;margin-bottom:22px">はじめに名前を登録してください。<br>ランキングと週目標に、この名前で表示されます。</div>'
     +'<div class="card" style="text-align:left">'
     +'<div class="lbl">あなたの名前</div>'
     +'<input type="text" id="obname" maxlength="12" placeholder="例：吉田" style="width:100%;margin:6px 0 12px">'
-    +'<button class="btn-dark" data-action="startapp" style="width:100%">はじめる</button>'
+    +'<button class="btn-dark" data-action="startapp" style="width:100%">新しくはじめる</button>'
     +'<div class="cnote">部内でわかる名前（名字など）がおすすめ。あとから設定（⚙）で変更できます。</div>'
+    +'</div>'
+    +'<div class="card" style="text-align:left;margin-top:12px">'
+    +'<div style="font-weight:700;font-size:13px;margin-bottom:4px">🔑 別の端末で使っていた人</div>'
+    +'<div class="cnote" style="padding:0 0 8px">前の端末の設定（⚙）に表示される「引き継ぎコード」を入力すると、同じアカウントを続けて使えます。</div>'
+    +'<input type="text" id="obcode" placeholder="引き継ぎコードを貼り付け" style="width:100%;margin:2px 0 10px;font-size:12px">'
+    +'<button class="btn-ghost" data-action="adoptcode" style="width:100%">コードで引き継ぐ</button>'
     +'</div></div>';
 }
 function settingsView(){
@@ -669,6 +725,17 @@ function settingsView(){
       ?'<div class="cnote" style="color:#2f7a3a">保存しました。ランキングと週目標にも反映されます。</div>'
       :'<div class="cnote">変更すると、ランキングと週目標の表示名も新しい名前になります。</div>')
     +'</div>';
+  h+='<div class="card" style="margin-top:16px"><div style="font-weight:700;font-size:13px;margin-bottom:6px">🔑 引き継ぎコード（この端末）</div>'
+    +'<div class="cnote" style="padding:0 0 6px">別の端末で同じアカウントを使うときは、新しい端末の最初の画面でこのコードを入力します。<b>他の人には教えないでください</b>（コードを知っている人だけが引き継げます）。</div>'
+    +'<textarea class="ff-ta" id="mycode" readonly style="min-height:54px;font-size:12px">'+escapeHtml(state.playerId)+'</textarea>'
+    +'<button class="btn-ghost" data-action="copycode" style="width:100%">コードをコピー</button></div>';
+  h+='<div class="card" style="margin-top:12px"><div style="font-weight:700;font-size:13px;margin-bottom:6px">↪️ 別のアカウントに切り替える</div>'
+    +'<div class="cnote" style="padding:0 0 6px">別端末の引き継ぎコードを入力すると、この端末をそのアカウントに切り替えます（今の表示名・IDは置き換わります）。</div>'
+    +'<input type="text" id="switchcode" placeholder="引き継ぎコードを貼り付け" style="width:100%;margin:2px 0 10px;font-size:12px">'
+    +'<button class="btn-ghost" data-action="switchcode" style="width:100%">このコードに切り替える</button></div>';
+  h+='<div class="card" style="margin-top:12px"><div style="font-weight:700;font-size:13px;margin-bottom:6px">⚠️ この端末のデータを消す</div>'
+    +'<div class="cnote" style="padding:0 0 6px">この端末に保存された記録・名前・IDを消して、最初からやり直します（サーバー上のみんなのデータは消えません）。</div>'
+    +'<button class="btn-ghost" data-action="resetlocal" style="width:100%;color:#c22a22;border-color:#e5b6b2">この端末をリセット</button></div>';
   h+='<button class="btn-ghost" data-action="tab" data-view="home" style="width:100%;margin-top:14px">← 記録にもどる</button>';
   h+='<div class="card" style="margin-top:16px"><div style="font-weight:700;font-size:13px;margin-bottom:6px">💾 バックアップ（書き出し）</div>'
     +'<div class="cnote">スコアはこの端末の中だけに保存されています。下の文字を全部コピーして、メモ帳やLINEの自分宛てに保存しておくと安心です（機種変更のときも復元できます）。</div>'
@@ -701,7 +768,7 @@ function ffPersonCard(e){
 /* ---------- 全体描画 ---------- */
 function topHeader(title){
   return '<div class="top"><div class="brand"><span class="dot">◎</span> '+title
-    +' <span style="font-size:11px;color:#9a9aa0;font-weight:400">v12</span></div></div>';
+    +' <span style="font-size:11px;color:#9a9aa0;font-weight:400">v14</span></div></div>';
 }
 function bottomNav(active){
   var items=[["home","記録","🎯"],["ranking","ランキング","🏆"],["ff","週目標","✍️"],["settings","設定","⚙️"]];
@@ -784,9 +851,18 @@ app.addEventListener("click",function(e){
 
   if(a==="startapp"){ var obn=document.getElementById("obname"); var nm=(obn?obn.value:"").trim();
     if(!nm){ alert("名前を入れてね。"); return; }
-    state.playerName=nm; try{localStorage.setItem("archery_pname",nm);}catch(x){}
-    registerMember();
-    state.screen="home"; publishMonth(state.rankMonth,function(){ render(); }); return; }
+    state.pendingName=nm; createNewAccount(); return; }
+  if(a==="adoptcode"){ var oc=document.getElementById("obcode"); adoptByCode(oc?oc.value:""); return; }
+  if(a==="switchcode"){ var sc=document.getElementById("switchcode"); var v=(sc?sc.value:"").trim();
+    if(!v){ alert("引き継ぎコードを入力してね。"); return; }
+    if(v===state.playerId){ alert("これは今の端末のコードです。"); return; }
+    if(confirm("この端末を、入力したコードのアカウントに切り替えます。今の表示は置き換わります。よろしいですか？")) adoptByCode(v); return; }
+  if(a==="copycode"){ var cc=state.playerId;
+    if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(cc).then(function(){ alert("コードをコピーしました。安全な場所に保存してね。"); },function(){ var el=document.getElementById("mycode"); if(el){el.focus();el.select();} alert("長押しで全選択してコピーしてね。"); }); }
+    else { var el2=document.getElementById("mycode"); if(el2){el2.focus();el2.select();} alert("長押しで全選択してコピーしてね。"); } return; }
+  if(a==="resetlocal"){ if(!confirm("この端末の記録・名前・IDを消して最初からやり直します。よろしいですか？（サーバー上のデータは消えません）")) return;
+    try{ localStorage.removeItem("archery_history_v1"); localStorage.removeItem("archery_pname"); localStorage.removeItem("archery_pid"); localStorage.removeItem("archery_flow_v2"); }catch(x){}
+    location.reload(); return; }
   if(a==="savename"){ var sni=document.getElementById("setname_input"); var nm2=(sni?sni.value:"").trim();
     if(!nm2){ alert("名前を入れてね。"); return; }
     state.playerName=nm2; try{localStorage.setItem("archery_pname",nm2);}catch(x){}

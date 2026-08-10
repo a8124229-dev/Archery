@@ -13,12 +13,13 @@
 <title>アーチェリー スコア管理</title>
 <style>
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-  html, body { margin: 0; padding: 0; }
+  html, body { margin: 0; padding: 0; height:100%; }
   body { background:#eceae4; color:#232323; display:flex; justify-content:center;
     font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Hiragino Sans","Noto Sans JP",sans-serif; }
-  #app { width:100%; max-width:460px; background:#f4f2ec; min-height:100vh; padding-bottom:calc(76px + env(safe-area-inset-bottom)); }
-  .bnav { position:fixed; bottom:0; left:0; right:0; max-width:460px; margin:0 auto; z-index:15;
-    display:flex; background:#232323; border-top:1px solid #000;
+  #app { width:100%; max-width:460px; margin:0 auto; background:#f4f2ec; height:100vh; height:100dvh; overflow:hidden; }
+  .shell { display:flex; flex-direction:column; height:100%; }
+  .scroll { flex:1 1 auto; overflow-y:auto; -webkit-overflow-scrolling:touch; }
+  .bnav { flex:none; display:flex; background:#232323; border-top:1px solid #000;
     padding-bottom:env(safe-area-inset-bottom); box-shadow:0 -2px 12px rgba(0,0,0,.18); }
   .bnav-item { flex:1; background:transparent; border:none; cursor:pointer; padding:8px 0 7px;
     display:flex; flex-direction:column; align-items:center; gap:3px; color:rgba(255,255,255,.6); }
@@ -278,7 +279,7 @@ var DB = {
       .then(function(r){ if(!r.ok)return r.text().then(function(t){ throw new Error(t||("HTTP "+r.status)); }); return true; });
   },
   membersAll:function(){
-    var url=SUPABASE_URL+"/rest/v1/members?select=player_id,name&order=name.asc";
+    var url=SUPABASE_URL+"/rest/v1/members?select=player_id,name,retired&order=name.asc";
     return fetch(url,{headers:this._h(),cache:"no-store"}).then(function(r){ if(!r.ok)return r.text().then(function(t){ throw new Error(t||("HTTP "+r.status)); }); return r.json(); });
   },
   memberUpsert:function(row){
@@ -339,7 +340,7 @@ var state = {
   importText:"", members:null, ffEntrants:null,
   pendingName:"", nameMatches:null, mergeBusy:false, onbLink:false,
   todoLoading:false, todoScorePids:null, todoGoalPids:null, todoMonth: todayStr().slice(0,7), todoWeek: mondayOf(),
-  photoView:null
+  photoView:null, retired: (localStorage.getItem("archery_retired")==="1")
 };
 (function(){ var f=load("archery_flow_v2");
   if(f && f.session && (f.screen==="input"||f.screen==="pickdist")){
@@ -409,8 +410,19 @@ function notEnteredNames(enteredPidSet){ return (state.members||[]).filter(funct
 function createNewAccount(){
   var p=genId(); state.playerId=p; try{localStorage.setItem("archery_pid",p);}catch(x){}
   state.playerName=state.pendingName; try{localStorage.setItem("archery_pname",state.playerName);}catch(x){}
-  state.pendingName=""; state.nameMatches=null; state.screen="home"; state.members=null;
+  state.pendingName=""; state.nameMatches=null; state.screen="savecode"; state.members=null;
   registerMember(); publishMonth(state.rankMonth,function(){ render(); });
+}
+function saveCodeView(){
+  return '<div class="top"><div class="brand"><span class="dot">◎</span> はじめる</div></div>'
+    +'<div style="padding:28px 20px">'
+    +'<div style="font-size:44px;text-align:center">🔑</div>'
+    +'<div style="font-size:19px;font-weight:800;text-align:center;margin:10px 0 6px">引き継ぎコードを保存してね</div>'
+    +'<div class="cnote" style="text-align:center">機種変更や別の端末で使うとき、このコードが必要です。<b>他の人には教えないでね。</b><br>スクショやLINEの自分宛てに保存しておくと安心です。</div>'
+    +'<textarea class="ff-ta" id="mycode2" readonly style="min-height:70px;font-size:12px;margin-top:12px">'+escapeHtml(state.playerId)+'</textarea>'
+    +'<button class="btn-ghost" data-action="copycode2" style="width:100%;margin-bottom:12px">コードをコピー</button>'
+    +'<button class="btn-dark" data-action="codedone" style="width:100%;padding:14px">保存した・はじめる</button>'
+    +'</div>';
 }
 function adoptByCode(code){
   code=(code||"").trim(); if(!code){ alert("引き継ぎコードを入力してね。"); return; }
@@ -786,6 +798,12 @@ function settingsView(){
     +'<div class="cnote" style="padding:0 0 6px">別端末の引き継ぎコードを入力すると、この端末をそのアカウントに切り替えます（今の表示名・IDは置き換わります）。</div>'
     +'<input type="text" id="switchcode" placeholder="引き継ぎコードを貼り付け" style="width:100%;margin:2px 0 10px;font-size:12px">'
     +'<button class="btn-ghost" data-action="switchcode" style="width:100%">このコードに切り替える</button></div>';
+  h+='<div class="card" style="margin-top:12px"><div style="font-weight:700;font-size:13px;margin-bottom:6px">🏹 引退</div>'
+    +'<div class="cnote" style="padding:0 0 6px">引退すると「未入力」の一覧に名前が出なくなります（過去のランキングは残ります）。</div>'
+    +(state.retired
+      ? '<div class="cnote" style="color:#2f7a3a;padding:0 0 6px">いまは引退中です。</div><button class="btn-ghost" data-action="unretire" style="width:100%">現役に戻す</button>'
+      : '<button class="btn-ghost" data-action="retire" style="width:100%">引退する</button>')
+    +'</div>';
   h+='<div class="card" style="margin-top:12px"><div style="font-weight:700;font-size:13px;margin-bottom:6px">⚠️ この端末のデータを消す</div>'
     +'<div class="cnote" style="padding:0 0 6px">この端末に保存された記録・名前・IDを消して、最初からやり直します（サーバー上のみんなのデータは消えません）。</div>'
     +'<button class="btn-ghost" data-action="resetlocal" style="width:100%;color:#c22a22;border-color:#e5b6b2">この端末をリセット</button></div>';
@@ -837,8 +855,9 @@ function todoView(){
   if(!DB.ready()){ return h+'<div class="card">ネットにつながると表示されます。</div></div>'; }
   if(state.todoLoading||state.members==null){ return h+'<div class="cnote">読み込み中…</div></div>'; }
   if(!state.members.length){ return h+'<div class="card">まだ登録メンバーがいません。みんながアプリを開くと表示されます。</div></div>'; }
-  var missScore=(state.members||[]).filter(function(m){ return !(state.todoScorePids||{})[m.player_id]; }).map(function(m){return m.name;});
-  var missGoal =(state.members||[]).filter(function(m){ return !(state.todoGoalPids||{})[m.player_id]; }).map(function(m){return m.name;});
+  var roster=(state.members||[]).filter(function(m){ return !m.retired; });
+  var missScore=roster.filter(function(m){ return !(state.todoScorePids||{})[m.player_id]; }).map(function(m){return m.name;});
+  var missGoal =roster.filter(function(m){ return !(state.todoGoalPids||{})[m.player_id]; }).map(function(m){return m.name;});
   h+='<div class="card" style="margin-bottom:12px"><div style="font-weight:800;font-size:15px;margin-bottom:4px">🎯 スコア未入力（'+monthLabel(state.todoMonth)+'）</div>'
     +'<div class="cnote" style="padding:0 0 8px">今月まだ1回も記録がない人（距離は問いません）</div>'
     +(missScore.length?('<div style="font-size:15px;color:#333;line-height:2">'+missScore.map(escapeHtml).join('、')+'</div>'):'<div style="color:#2f7a3a;font-weight:700">全員入力済みです！🎉</div>')+'</div>';
@@ -928,7 +947,7 @@ function shareCanvas(c){
 /* ---------- 全体描画 ---------- */
 function topHeader(title){
   return '<div class="top"><div class="brand"><span class="dot">◎</span> '+title
-    +' <span style="font-size:11px;color:#9a9aa0;font-weight:400">v18</span></div></div>';
+    +' <span style="font-size:11px;color:#9a9aa0;font-weight:400">v19</span></div></div>';
 }
 function bottomNav(active){
   var items=[["home","記録","🎯"],["ranking","ランキング","🏆"],["ff","週目標","✍️"],["todo","未入力","📋"],["settings","設定","⚙️"]];
@@ -938,21 +957,27 @@ function bottomNav(active){
       +'<span class="bnav-ic">'+it[2]+'</span><span class="bnav-lb">'+it[1]+'</span></button>'; });
   return h+'</div>';
 }
+var _lastScreen="";
 function render(){
-  var y=window.scrollY,h="";
-  if(!state.playerName){ h=onboardingView(); }
-  else if(state.screen==="settings"){ h=topHeader("設定")+settingsView()+bottomNav("settings"); }
-  else if(state.screen==="home"){ h=topHeader("記録")+homeView()+bottomNav("home"); }
-  else if(state.screen==="ranking"){ h=topHeader("ランキング")+rankingView()+bottomNav("ranking"); }
-  else if(state.screen==="ff"){ h=topHeader("週目標")+ffView()+bottomNav("ff"); }
-  else if(state.screen==="todo"){ h=topHeader("未入力")+todoView()+bottomNav("todo"); }
-  else if(state.screen==="pickdist"){ h=pickDistView(); }
-  else if(state.screen==="choose"){ h=chooseView(); }
-  else if(state.screen==="photoform"){ h=photoFormView(); }
-  else if(state.screen==="input"){ h=inputView(); if(state.sheet)h+=sheetView(); }
+  var sc=document.getElementById("scroll"); var y=sc?sc.scrollTop:0;
+  var key=(state.playerName?state.screen:"onboard")+(state.ffPerson?":p":"")+(state.ffTab||"");
+  if(key!==_lastScreen)y=0; _lastScreen=key;
+  var inner="",nav="";
+  if(!state.playerName){ inner=onboardingView(); }
+  else if(state.screen==="savecode"){ inner=saveCodeView(); }
+  else if(state.screen==="settings"){ inner=topHeader("設定")+settingsView(); nav=bottomNav("settings"); }
+  else if(state.screen==="home"){ inner=topHeader("記録")+homeView(); nav=bottomNav("home"); }
+  else if(state.screen==="ranking"){ inner=topHeader("ランキング")+rankingView(); nav=bottomNav("ranking"); }
+  else if(state.screen==="ff"){ inner=topHeader("週目標")+ffView(); nav=bottomNav("ff"); }
+  else if(state.screen==="todo"){ inner=topHeader("未入力")+todoView(); nav=bottomNav("todo"); }
+  else if(state.screen==="pickdist"){ inner=pickDistView(); }
+  else if(state.screen==="choose"){ inner=chooseView(); }
+  else if(state.screen==="photoform"){ inner=photoFormView(); }
+  else if(state.screen==="input"){ inner=inputView(); if(state.sheet)inner+=sheetView(); }
+  var h='<div class="shell"><div class="scroll" id="scroll">'+inner+'</div>'+(nav||'')+'</div>';
   if(state.photoView){ h+=photoOverlay(); }
   document.getElementById("app").innerHTML=h;
-  window.scrollTo(0,y);
+  var sc2=document.getElementById("scroll"); if(sc2)sc2.scrollTop=y;
   hydratePhotos();
 }
 function rerender(){ persistFlow(); render(); }
@@ -1009,6 +1034,15 @@ app.addEventListener("click",function(e){
   if(a==="metric"){ state.metric=t.dataset.metric; render(); return; }
   if(a==="add"){ startAdd(); return; }
   if(a==="pbdismiss"){ state.pbMsg=""; render(); return; }
+  if(a==="codedone"){ state.screen="home"; window.scrollTo(0,0); render(); return; }
+  if(a==="copycode2"){ var cc2=state.playerId;
+    if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(cc2).then(function(){ alert("コードをコピーしました。安全な場所に保存してね。"); },function(){ var el=document.getElementById("mycode2"); if(el){el.focus();el.select();} alert("長押しで全選択してコピーしてね。"); }); }
+    else { var el2=document.getElementById("mycode2"); if(el2){el2.focus();el2.select();} alert("長押しで全選択してコピーしてね。"); } return; }
+  if(a==="retire"||a==="unretire"){ var rv=(a==="retire");
+    if(rv && !confirm("引退すると「未入力」の一覧に名前が出なくなります。よろしいですか？（記録は残ります）"))return;
+    state.retired=rv; try{localStorage.setItem("archery_retired",rv?"1":"0");}catch(x){}
+    if(DB.ready()&&state.playerName){ DB.memberUpsert({player_id:state.playerId,name:state.playerName,retired:rv}).then(function(){ state.members=null; }).catch(function(){}); }
+    alert(rv?"引退にしました。":"現役に戻しました。"); render(); return; }
   if(a==="shot"){ var rs=state.history.filter(function(x){return x.id===t.dataset.id;})[0]; if(rs){ try{ shareCanvas(recordToCanvas(rs)); }catch(err){ alert("画像を作れませんでした。"); } } return; }
   if(a==="viewphoto"){ state.photoView=t.dataset.id; render(); return; }
   if(a==="closephoto"){ state.photoView=null; render(); return; }

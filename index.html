@@ -320,6 +320,11 @@ var DB = {
     var url=SUPABASE_URL+"/rest/v1/members?player_id=eq."+encodeURIComponent(pid);
     return fetch(url,{method:"DELETE",headers:this._h()}).then(function(r){ if(!r.ok)return r.text().then(function(t){ throw new Error(t||("HTTP "+r.status)); }); return true; });
   },
+  patchName:function(table,pid,name){
+    var url=SUPABASE_URL+"/rest/v1/"+table+"?player_id=eq."+encodeURIComponent(pid);
+    return fetch(url,{method:"PATCH",headers:this._h({"Content-Type":"application/json",Prefer:"return=minimal"}),body:JSON.stringify({name:name})})
+      .then(function(r){ if(!r.ok)return r.text().then(function(t){ throw new Error(t||("HTTP "+r.status)); }); return true; });
+  },
   scoreMonth:function(month){
     var url=SUPABASE_URL+"/rest/v1/highscores?select=player_id&month=eq."+encodeURIComponent(month)+"&limit=1000";
     return fetch(url,{headers:this._h(),cache:"no-store"}).then(function(r){ if(!r.ok)return r.text().then(function(t){ throw new Error(t||("HTTP "+r.status)); }); return r.json(); });
@@ -947,7 +952,7 @@ function shareCanvas(c){
 /* ---------- 全体描画 ---------- */
 function topHeader(title){
   return '<div class="top"><div class="brand"><span class="dot">◎</span> '+title
-    +' <span style="font-size:11px;color:#9a9aa0;font-weight:400">v19</span></div></div>';
+    +' <span style="font-size:11px;color:#9a9aa0;font-weight:400">v20</span></div></div>';
 }
 function bottomNav(active){
   var items=[["home","記録","🎯"],["ranking","ランキング","🏆"],["ff","週目標","✍️"],["todo","未入力","📋"],["settings","設定","⚙️"]];
@@ -1078,8 +1083,16 @@ app.addEventListener("click",function(e){
   if(a==="savename"){ var sni=document.getElementById("setname_input"); var nm2=(sni?sni.value:"").trim();
     if(!nm2){ alert("名前を入れてね。"); return; }
     state.playerName=nm2; try{localStorage.setItem("archery_pname",nm2);}catch(x){}
-    registerMember();
-    state.nameSaved=true; publishMonth(state.rankMonth,function(){ render(); }); return; }
+    registerMember(); state.nameSaved=true;
+    var npid=state.playerId;
+    var afterRename=function(){ state.members=null; if(state.screen==="ranking"){ loadRanking(); } else if(state.screen==="ff"){ loadFFMine(); } else { render(); } };
+    if(DB.ready()){
+      publishMonth(state.rankMonth,function(){
+        Promise.all([DB.patchName("highscores",npid,nm2),DB.patchName("highscores72",npid,nm2),DB.patchName("feedforward",npid,nm2)])
+          .then(afterRename).catch(afterRename);
+      });
+    } else { render(); }
+    return; }
 
   if(a==="pickdist"){ var d=+t.dataset.dist,idx=state.pickForRound;
     if(state.session.rounds[idx]){ state.session.rounds[idx].distance=d; } else { state.session.rounds[idx]=emptyRound(d); }

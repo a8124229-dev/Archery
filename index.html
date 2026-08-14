@@ -957,7 +957,7 @@ function shareCanvas(c){
 /* ---------- 全体描画 ---------- */
 function topHeader(title){
   return '<div class="top"><div class="brand"><span class="dot">◎</span> '+title
-    +' <span style="font-size:11px;color:#9a9aa0;font-weight:400">v22</span></div></div>';
+    +' <span style="font-size:11px;color:#9a9aa0;font-weight:400">v23</span></div></div>';
 }
 function bottomNav(active){
   var items=[["home","記録","🎯"],["ranking","ランキング","🏆"],["ff","週目標","✍️"],["todo","未入力","📋"],["settings","設定","⚙️"]];
@@ -1160,7 +1160,7 @@ app.addEventListener("click",function(e){
       if(dm && DB.ready() && state.playerName){
         Promise.all([DB.delMonth("highscores",state.playerId,dm),DB.delMonth("highscores72",state.playerId,dm)])
           .then(function(){ publishMonth(dm,function(){ if(state.screen==="ranking"){ loadRanking(); } else { render(); } }); })
-          .catch(function(){ render(); });
+          .catch(function(err){ alert("サーバー側のスコア削除に失敗しました：\n"+((err&&err.message)||"通信エラー")+"\n\nSupabaseで削除の許可（delete policy）が必要かもしれません。"); render(); });
       } else { render(); }
     } return; }
 

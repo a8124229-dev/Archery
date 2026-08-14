@@ -82,9 +82,9 @@
   .hist-empty { padding:44px 24px; text-align:center; color:#8a8a90; }
   .hist-empty .big { font-size:40px; margin-bottom:8px; }
   .hcard { background:#fff; border:1px solid #d3d0c8; border-radius:12px; padding:12px 14px; margin-bottom:10px; }
-  .hcard .head { display:flex; justify-content:space-between; align-items:baseline; }
-  .hcard .date { font-weight:700; font-size:15px; }
-  .hcard .tot { font-size:20px; font-weight:800; } .hcard .tot small { font-size:12px; color:#8a8a90; font-weight:500; }
+  .hcard .head { display:flex; justify-content:space-between; align-items:center; gap:10px; }
+  .hcard .date { font-weight:700; font-size:15px; display:flex; flex-wrap:wrap; align-items:center; gap:6px; min-width:0; flex:1; }
+  .hcard .tot { font-size:20px; font-weight:800; flex:none; white-space:nowrap; } .hcard .tot small { font-size:12px; color:#8a8a90; font-weight:500; }
   .hcard .meta { display:flex; flex-wrap:wrap; gap:14px; margin-top:6px; font-size:13px; color:#555; }
   .hcard .meta .x { color:#a06a1a; }
   .hcard .acts { display:flex; gap:8px; margin-top:10px; }
@@ -508,8 +508,9 @@ function homeView(){
     h+='<div class="hcard"><div class="head"><div class="date">'+jpDate(s.date)
       +(isMatch?' <span class="kindtag match">試合</span>':' <span class="kindtag">練習</span>')
       +(isPhoto?' <span class="kindtag" style="color:#1c6a94;background:#e7f4fb">📷写真</span>':'')
-      +(s.matchName?(' <span style="font-size:13px;color:#555;font-weight:600">'+escapeHtml(s.matchName)+'</span>'):'')
-      +'</div><div class="tot">'+gt+'<small> / '+(used.length*360)+'</small></div></div><div class="meta">';
+      +'</div><div class="tot">'+gt+'<small> / '+(used.length*360)+'</small></div></div>';
+    if(s.matchName){ h+='<div style="font-size:14px;color:#333;font-weight:600;margin-top:4px">🏆 '+escapeHtml(s.matchName)+'</div>'; }
+    h+='<div class="meta">';
     used.forEach(function(r,i){ h+='<span>R'+(i+1)+' <b>'+r.distance+'m</b> '+roundStats(r).total+'点</span>'; });
     if(!isPhoto){ h+='<span class="x">X '+xs+'</span>'; }
     h+='</div>';
@@ -952,7 +953,7 @@ function shareCanvas(c){
 /* ---------- 全体描画 ---------- */
 function topHeader(title){
   return '<div class="top"><div class="brand"><span class="dot">◎</span> '+title
-    +' <span style="font-size:11px;color:#9a9aa0;font-weight:400">v20</span></div></div>';
+    +' <span style="font-size:11px;color:#9a9aa0;font-weight:400">v21</span></div></div>';
 }
 function bottomNav(active){
   var items=[["home","記録","🎯"],["ranking","ランキング","🏆"],["ff","週目標","✍️"],["todo","未入力","📋"],["settings","設定","⚙️"]];
